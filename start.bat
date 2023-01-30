@@ -1,0 +1,1 @@
+srcds -game csgo -console -usercon -nobots -port 27027 +game_type 0 +game_mode 0 +mapgroup mg_custom +map achievement_idle
