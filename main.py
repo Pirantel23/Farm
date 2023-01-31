@@ -9,16 +9,18 @@ import gspread
 from termcolor import colored, cprint
 import requests
 from colorama import just_fix_windows_console
+from datetime import datetime
+import win32api
 
 def help():
     cprint("<LIST OF ALL COMMANDS>", 'green', attrs=['bold'])
-    cprint("  ● Show this message: help/H/h", 'white')
-    cprint("  ● Start instances: start/S/s --test/-t/-T for testing mode", 'white')
-    cprint("  ● Update spreadsheet: update/U/u", 'white')
-    cprint("  ● List accounts: list/L/l", 'white')
-    cprint("  ● Price drops: price/P/p --specific/-s/-S to update specific drops", 'white')
-    cprint("  ● Get inventory: inventory/I/i --drops/-d/-D to show drops only", 'white')
-    cprint("  ● Exit: exit/E/e", 'white')
+    cprint("  ● Show this message: help", 'white')
+    cprint("  ● Start instances: start --test/-t/-T for testing mode", 'white')
+    cprint("  ● Update spreadsheet: update", 'white')
+    cprint("  ● List accounts: list", 'white')
+    cprint("  ● Price drops: price --specific/-s/-S to update specific drops", 'white')
+    cprint("  ● Get inventory: inventory --drops/-d/-D to show drops only", 'white')
+    cprint("  ● Exit: exit", 'white')
 
 def price_drops(specific_drop):
     chosen_drops = []
@@ -44,11 +46,12 @@ def price_drops(specific_drop):
             r = requests.get("https://steamcommunity.com/market/priceoverview/?country=RU&currency=5&appid=730&market_hash_name=" + Drops[drop])
             price = r.json()["lowest_price"]
             sheet.update_acell(f"C{drops.index(drop)+2}", price)
+            sheet.update_acell(f"D{drops.index(drop)+2}", datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
             cprint(f"  ● {drop}: {price} Updated", 'green', attrs=['bold'])
         except TypeError:
             cprint(f"  ● {drop}: Not updated", 'red', attrs=['bold'])
 
-def getInventory(steamid):
+def get_inventory(steamid):
     cprint(f"Accessing inventory of {steamid}", 'yellow', attrs=['bold'])
     data = requests.get(f'https://steamcommunity.com/inventory/{steamid}/730/2?l=english&count=5000')
     if data.status_code == 200: cprint(f"Inventory {steamid} loaded", 'green', attrs=['bold'])
@@ -84,12 +87,29 @@ def getInventory(steamid):
 def list_accounts():
     cprint("<LIST OF ALL ACCOUNTS>", 'green', attrs=['bold'])
     for i in accounts:
-        cprint(f"  ● Account {i['Номер']}: {i['SteamID']} {i['Логин']}:{i['Пароль']} {i['Телефон']} {i['Почта']} Recovery code: {i['Код']}",'white')
+        cprint(f"  ● Account {i['Номер']}: {i['SteamID']} {i['Логин']}:{i['Пароль']} {i['Телефон']} {i['Почта']}",'white')
 
 def update_spreadsheet():
     global sh, accounts
     cprint("Updating spreadsheet...", 'yellow', attrs=['bold'])
-    gc = gspread.service_account()
+    try:
+        gc = gspread.service_account()
+        cprint("Service account file loaded.", 'green', attrs=['bold'])
+    except FileNotFoundError:
+        if os.path.exists('service_account.json'):
+            cprint("Service account file found.", 'green', attrs=['bold'])
+            appdata = os.getenv('APPDATA')
+            path = appdata + '\\gspread'
+            cprint("Moving service account file to {}".format(path), 'yellow', attrs=['bold'])
+            os.makedirs(path, exist_ok=True)
+            os.rename("service_account.json",f"{path}\\service_account.json")
+            gc = gspread.service_account()
+            cprint("Service account file loaded.", 'green', attrs=['bold'])
+        else:
+            cprint("Service account file not found.", 'red', attrs=['bold'])
+            cprint("Please download service account file and put it in the same folder", 'red', attrs=['bold'])
+            input()
+            exit()
     sh = gc.open("Ферма")
     accounts = sh.sheet1.get_all_records()
     cprint("Loaded {} accounts".format(len(accounts)), 'green', attrs=['bold'])
@@ -101,21 +121,24 @@ def start_instances(sheet1, isTesting):
     while 1:
         print("Select accounts: ")
         selection = input().split()
+        if len(selection)==0:
+            cprint("No accounts selected", 'red', attrs=['bold'])
+            continue
         selectedAccounts = set()
         for num, i in enumerate(selection):
-            if i.isdigit():
+            if i.isdigit() and int(i)>0:
                 selectedAccounts.add(int(i))
             elif '-' in i:
                 start = i.split('-')[0]
                 end = i.split('-')[1]
                 if start.isdigit() and end.isdigit():
-                    selectedAccounts |= set(range(int(start), int(end)+1))
+                    selectedAccounts |= set(range(max(1,int(start)), int(end)+1))
             else:
                 cprint("Invalid input in {} argument".format(num+1), 'red', attrs=['bold'])
                 continue
         n = len(selectedAccounts)
-        if n>maxValue:
-            cprint("Too many accounts selected. You can select up to {} accounts".format(maxValue), 'red', attrs=['bold'])
+        if n>maxValue or n>len(accounts):
+            cprint("Too many accounts selected. You can select up to {} accounts".format(min(maxValue, len(accounts))), 'red', attrs=['bold'])
             continue
         ans = input(colored("Are you sure you want to select {} accounts? (y/n): ".format(n), 'yellow', attrs=['bold']))
         if ans=='y': break
@@ -147,12 +170,13 @@ def start_instances(sheet1, isTesting):
             account = accounts[str(selectedAccounts[i])] # accounts is a dictionary
             accountActivationString = accountActivationString.replace('LOGIN', account['login']).replace('PASSWORD', account['password'])
             cprint(f"Account initialized: {account['login']}", 'green', attrs=['bold'])
-        cprint(f"Command: {accountActivationString}", 'grey', attrs=['dark'])
+        cprint(f"Command: {accountActivationString}", 'grey')
         if isTesting: cprint("Testing mode. Skipping lauching...", 'yellow', attrs=['bold'])
         else:
             os.system(accountActivationString)
             time.sleep(1)
     root.mainloop()
+
 
 Drops = {"Fracture Case": r"Fracture%20Case",
          "Dreams and Nightmares Case": r"Dreams%20%26%20Nightmares%20Case",
@@ -190,11 +214,44 @@ Drops = {"Fracture Case": r"Fracture%20Case",
          "Gamma 2 Case": r"Gamma%202%20Case",
          "Chroma 3 Case": r"Chroma%203%20Case",
         }
+
 just_fix_windows_console()
+
 cprint("Welcome to Steam Account Manager", 'magenta', attrs=['bold'])
 cprint('  by pirantel', 'magenta', attrs=['bold'])
 cprint("Type 'help' to see all commands", 'magenta', attrs=['bold'])
-data = open('config.json', 'r')
+
+try:
+    data = open('config.json', 'r')
+    cprint("Config file loaded.", 'green', attrs=['bold'])
+except FileNotFoundError:
+    cprint("Config file not found.", 'yellow', attrs=['bold'])
+    cprint("Creating config file...", 'yellow', attrs=['bold'])
+    PossiblePaths = [r"X:\Steam\steam.exe", r"X:\Program Files\Steam\steam.exe", r"X:\Program Files (x86)\Steam\steam.exe"]
+    ValidHardPaths = []
+    for Drive in win32api.GetLogicalDriveStrings().split('\000')[:-1]:
+        Drive = Drive.replace(':\\', '')
+        for path in PossiblePaths:
+            path = path.replace("X", Drive)
+            if os.path.exists(path):
+                ValidHardPaths.append(path)
+    if len(ValidHardPaths) == 0:
+        cprint("Steam not found. Please enter path to steam.exe", 'red', attrs=['bold'])
+        steamPath = input()
+    elif len(ValidHardPaths) == 1:
+        steamPath = ValidHardPaths[0]
+        cprint(f"Steam found at {steamPath}", 'green', attrs=['bold'])
+    else:
+        cprint("Steam found at multiple locations:", 'yellow', attrs=['bold'])
+        for i in range(len(ValidHardPaths)):
+            cprint(f"{i+1}. {ValidHardPaths[i]}", 'yellow', attrs=['bold'])
+        cprint("Please enter number of correct path", 'yellow', attrs=['bold'])
+        steamPath = ValidHardPaths[int(input(':'))-1]
+    data = open('config.json', 'w')
+    data.write(json.dumps({"steampath": steamPath, "cmdcommand": "start \"\" STEAMPATH -login LOGIN PASSWORD -language russian -applaunch 730 -low -nohltv -nosound -novid -window -w 640 -h 480 +connect 192.168.1.106:27027 +exec farm.cfg -x X -y Y"}))
+    data.close()
+    data = open('config.json', 'r')
+    cprint("Config file loaded.", 'green', attrs=['bold'])
 jsondata = json.load(data)
 cmdstring = jsondata["cmdcommand"].replace('STEAMPATH', jsondata["steampath"])
 sh = []
@@ -203,24 +260,27 @@ update_spreadsheet()
 if len(accounts)==0:
     cprint("No accounts found.", 'red', attrs=['bold'])
 
-while 1:
-    mode, *args = (input(":")+'').lower().split()
-    if mode in ['help', 'h']:
+while 1: # main loop
+    try:
+        mode, *args = input(":").lower().split()
+    except ValueError:
+        continue
+    if mode in ['help']:
         help()
-    elif mode in ['start', 's']:
+    elif mode in ['start']:
         start_instances(accounts, '--test' in args or '-t' in args)
-    elif mode in ['update', 'u']:
+    elif mode in ['update']:
         update_spreadsheet()
-    elif mode in ['list', 'l']:
+    elif mode in ['list']:
         list_accounts()
-    elif mode in ['price', 'p']:
+    elif mode in ['price']:
         price_drops('--specific' in args or '-s' in args)
-    elif mode in ['inventory', 'i']:
+    elif mode in ['inventory']:
         number = input(colored(f"Enter SteamID or account number between 1 and {len(accounts)}: ", 'yellow', attrs=['bold']))
         if number.isdigit():
             number = int(number)
             if number>0 and number<=len(accounts): number = str(accounts[number-1]['SteamID'])
-        inventory = getInventory(number)
+        inventory = get_inventory(number)
         if inventory == None:
             cprint("Error getting inventory", 'red', attrs=['bold'])
             continue
@@ -230,7 +290,7 @@ while 1:
         else:
             for item, count in inventory.items():
                 cprint(f"  ● {item} x {count}", 'white', attrs=['bold'])
-    elif mode in ['exit', 'e']:
+    elif mode in ['exit']:
         cprint("Exiting...", 'yellow', attrs=['bold'])
         exit()
     else:
