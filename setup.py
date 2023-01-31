@@ -7,3 +7,4 @@ PyInstaller.__main__.run([
      '--uac-admin',
      '-i=icon.ico'                                 
 ])
+os.system('move dist\main.exe main.exe')
