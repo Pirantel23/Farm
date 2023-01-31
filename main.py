@@ -50,7 +50,7 @@ def price_drops(specific_drop):
         except TypeError:
             cprint(f"  ● {drop}: Not updated", 'red', attrs=['bold'])
 
-def get_inventory(steamid):
+def get_inventory(steamid, drops_only):
     cprint(f"Accessing inventory of {steamid}", 'yellow', attrs=['bold'])
     data = requests.get(f'https://steamcommunity.com/inventory/{steamid}/730/2?l=english&count=5000')
     if data.status_code == 200: cprint(f"Inventory {steamid} loaded", 'green', attrs=['bold'])
@@ -67,6 +67,10 @@ def get_inventory(steamid):
         cprint(f"Inventory of {steamid} not loaded", 'red', attrs=['bold'])
         return
     json_data = json.loads(data.text)
+    inventory_count = json_data['total_inventory_count']
+    if inventory_count == 0:
+        cprint(f"Inventory of {steamid} is empty", 'red', attrs=['bold'])
+        return
     assets = json_data['assets']
     descriptions = json_data['descriptions']
     items = {}
@@ -81,6 +85,14 @@ def get_inventory(steamid):
         id = description['classid']
         name = description['name']
         inventory[name] = items[id]
+    if drops_only:
+        drops = list(Drops.keys())
+        for item in list(inventory.keys()):
+            for drop in drops:
+                if drop.lower()==item.lower():
+                    break
+            else:
+                del inventory[item]
     return inventory
 
 def list_accounts():
@@ -169,13 +181,12 @@ def start_instances(sheet1, isTesting):
             account = accounts[str(selectedAccounts[i])] # accounts is a dictionary
             accountActivationString = accountActivationString.replace('LOGIN', account['login']).replace('PASSWORD', account['password'])
             cprint(f"Account initialized: {account['login']}", 'green', attrs=['bold'])
-        cprint(f"Command: {accountActivationString}", 'grey')
+        cprint(f"Command: {accountActivationString}", 'white', attrs=['dark'])
         if isTesting: cprint("Testing mode. Skipping lauching...", 'yellow', attrs=['bold'])
         else:
             os.system(accountActivationString)
             time.sleep(1)
     root.mainloop()
-
 
 Drops = {"Fracture Case": r"Fracture%20Case",
          "Dreams and Nightmares Case": r"Dreams%20%26%20Nightmares%20Case",
@@ -216,7 +227,7 @@ Drops = {"Fracture Case": r"Fracture%20Case",
 
 just_fix_windows_console()
 
-cprint("Welcome to Steam Account Manager", 'magenta', attrs=['bold'])
+cprint("Welcome to Farm Manager", 'magenta', attrs=['bold'])
 cprint('  by pirantel', 'magenta', attrs=['bold'])
 cprint("Type 'help' to see all commands", 'magenta', attrs=['bold'])
 
@@ -242,7 +253,7 @@ except FileNotFoundError:
     else:
         cprint("Steam found at multiple locations:", 'yellow', attrs=['bold'])
         for i in range(len(ValidHardPaths)):
-            cprint(f"{i+1}. {ValidHardPaths[i]}", 'yellow', attrs=['bold'])
+            cprint(f"{i+1}. {ValidHardPaths[i]}", 'white', attrs=['bold'])
         cprint("Please enter number of correct path", 'yellow', attrs=['bold'])
         steamPath = ValidHardPaths[int(input(':'))-1]
     data = open('config.json', 'w')
@@ -278,7 +289,7 @@ while 1: # main loop
         if number.isdigit():
             number = int(number)
             if number>0 and number<=len(accounts): number = str(accounts[number-1]['SteamID'])
-        inventory = get_inventory(number)
+        inventory = get_inventory(number, '--specific' in args or '-s' in args)
         if inventory == None:
             cprint("Error getting inventory", 'red', attrs=['bold'])
             continue
