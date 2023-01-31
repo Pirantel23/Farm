@@ -229,7 +229,6 @@ except FileNotFoundError:
     PossiblePaths = [r"X:\Steam\steam.exe", r"X:\Program Files\Steam\steam.exe", r"X:\Program Files (x86)\Steam\steam.exe"]
     ValidHardPaths = []
     for Drive in string.ascii_uppercase:
-        Drive = Drive.replace(':\\', '')
         for path in PossiblePaths:
             path = path.replace("X", Drive)
             if os.path.exists(path):
