@@ -10,6 +10,7 @@ from termcolor import colored, cprint
 import requests
 from colorama import just_fix_windows_console
 from datetime import datetime
+from sys import exit
 
 def help():
     cprint("<LIST OF ALL COMMANDS>", 'green', attrs=['bold'])
@@ -44,9 +45,10 @@ def price_drops(specific_drop):
         try:
             r = requests.get("https://steamcommunity.com/market/priceoverview/?country=RU&currency=5&appid=730&market_hash_name=" + Drops[drop])
             price = r.json()["lowest_price"]
-            sheet.update_acell(f"C{drops.index(drop)+2}", price)
+            price = price.replace(" pуб.", "") # deleting " pуб." from price
+            sheet.update_acell(f"C{drops.index(drop)+2}", price) 
             sheet.update_acell(f"D{drops.index(drop)+2}", datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
-            cprint(f"  ● {drop}: {price} Updated", 'green', attrs=['bold'])
+            cprint(f"  ● {drop}: {price} руб. Updated", 'green', attrs=['bold'])
         except TypeError:
             cprint(f"  ● {drop}: Not updated", 'red', attrs=['bold'])
 
