@@ -11,12 +11,14 @@ import requests
 from colorama import just_fix_windows_console
 from datetime import datetime
 from sys import exit
+from subprocess import Popen
+import socket
 
 def help():
     cprint("<LIST OF ALL COMMANDS>", 'green', attrs=['bold'])
     cprint("  ● Show this message: help", 'white')
-    cprint("  ● Start instances: start --test/-t/-T for testing mode", 'white')
-    cprint("  ● Update spreadsheet: update", 'white')
+    cprint("  ● Start instances: start --test/-t/-T for testing mode --restart/-r/-R to restart account", 'white')
+    cprint("  ● Update server: update", 'white')
     cprint("  ● List accounts: list", 'white')
     cprint("  ● Price drops: price --specific/-s/-S to update specific drops", 'white')
     cprint("  ● Get inventory: inventory --drops/-d/-D to show drops only", 'white')
@@ -128,6 +130,7 @@ def update_spreadsheet():
     cprint("Loaded {} accounts".format(len(accounts)), 'green', attrs=['bold'])
 
 def start_instances(sheet1, isTesting):
+    global coordinates_dict
     accounts = {str(n+1):{"login":str(i['Логин']), "password":str(i['Пароль'])} for n,i in enumerate(sheet1)}
     width, height = pg.size()
     maxValue = (width//400) * (height//300)
@@ -171,6 +174,7 @@ def start_instances(sheet1, isTesting):
     padX = (width - distribution[0]*400) // (distribution[0]+1)
     padY = (height - distribution[1]*300) // (distribution[1]+1)
     windowsCoordinates = [(padX*(x+1)+x*400,padY*(y+1)+y*300) for y in range(distribution[1]) for x in range(distribution[0])]
+    coordinates_dict = {str(selectedAccounts[i]):windowsCoordinates[i] for i in range(n)}
     cprint("Distribution calculated. Screenspace coordinates:", 'white', attrs=['bold'])
     for i in range(n): print("Account {}: {}".format(selectedAccounts[i], windowsCoordinates[i]))
     for i in range(n):
@@ -189,6 +193,76 @@ def start_instances(sheet1, isTesting):
             os.system(accountActivationString)
             time.sleep(1)
     root.mainloop()
+
+def get_steampath():
+    PossiblePaths = [r"X:\Steam\steam.exe", r"X:\Program Files\Steam\steam.exe", r"X:\Program Files (x86)\Steam\steam.exe"]
+    ValidHardPaths = []
+    for Drive in string.ascii_uppercase:
+        for path in PossiblePaths:
+            path = path.replace("X", Drive)
+            if os.path.exists(path):
+                ValidHardPaths.append(path)
+    if len(ValidHardPaths) == 0:
+        cprint("Steam not found. Please enter path to steam.exe", 'red', attrs=['bold'])
+        steamPath = input()
+    elif len(ValidHardPaths) == 1:
+        steamPath = ValidHardPaths[0]
+        cprint(f"Steam found at {steamPath}", 'green', attrs=['bold'])
+    else:
+        cprint("Steam found at multiple locations:", 'yellow', attrs=['bold'])
+        for i in range(len(ValidHardPaths)):
+            cprint(f"{i+1}. {ValidHardPaths[i]}", 'white', attrs=['bold'])
+        cprint("Please enter number of correct path", 'yellow', attrs=['bold'])
+        steamPath = ValidHardPaths[int(input(':'))-1]
+    return steamPath
+
+def get_steamcmdpath():
+    cprint("SteamCMD path not set.", 'yellow', attrs=['bold'])
+    drives = [ chr(x) + ":" for x in range(65,91) if os.path.exists(chr(x) + ":") ]
+    steamcmdpath = ''
+    for drive in drives:
+        for r,d,f in os.walk(drive + '\\'):
+            if 'steamcmd' not in r.lower(): continue
+            if 'steamcmd.exe' in f:
+                steamcmdpath = r
+                break
+    cprint(f"SteamCMD found at: {steamcmdpath}\\steamcmd.exe", 'green', attrs=['bold'])
+    return steamcmdpath
+
+def update_server():
+    cprint("Updating server...", 'yellow', attrs=['bold'])
+    Popen('steamcmd.exe +login anonymous +app_update 740 validate +quit', cwd=steamcmdpath, shell=True)
+
+def start_server():
+    cprint("Starting server...", 'yellow', attrs=['bold'])
+    Popen("srcds -game csgo -console -usercon -nobots -port 27027 -usercon -console +game_type 0 +game_mode 0 +mapgroup mg_custom +map achievement_idle +sv_logflush 1 +log on +sv_log_onefile 1",
+    cwd=steamcmdpath + r"\steamapps\common\Counter-Strike Global Offensive Beta - Dedicated Server", shell=True)
+
+def monitor_drops():
+    cprint("Monitoring drops...", 'yellow', attrs=['bold'])
+    
+def restart_account(sheet1, account_number, isTesting):
+    accounts = {str(n+1):{"login":str(i['Логин']), "password":str(i['Пароль'])} for n,i in enumerate(sheet1)}
+    cprint(f"Restarting account {account_number}...", 'yellow', attrs=['bold'])   
+    account = accounts[str(account_number)] # accounts is a dictionary
+    accountActivationString = cmdstring.replace('LOGIN', account['login']).replace('PASSWORD', account['password']).replace('X', str(coordinates_dict[str(account_number)][0])).replace('Y', str(coordinates_dict[str(account_number)][1]))
+    cprint(f"Account initialized: {account['login']}", 'green', attrs=['bold'])
+    cprint(f"Command: {accountActivationString}", 'white', attrs=['dark'])
+    if not isTesting:
+        os.system(accountActivationString)
+    else: cprint("Testing mode. Skipping lauching...", 'yellow', attrs=['bold'])
+
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('192.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
 
 Drops = {"Fracture Case": r"Fracture%20Case",
          "Dreams and Nightmares Case": r"Dreams%20%26%20Nightmares%20Case",
@@ -237,40 +311,22 @@ try:
     data = open('config.json', 'r')
     cprint("Config file loaded.", 'green', attrs=['bold'])
 except FileNotFoundError:
-    cprint("Config file not found.", 'yellow', attrs=['bold'])
     cprint("Creating config file...", 'yellow', attrs=['bold'])
-    PossiblePaths = [r"X:\Steam\steam.exe", r"X:\Program Files\Steam\steam.exe", r"X:\Program Files (x86)\Steam\steam.exe"]
-    ValidHardPaths = []
-    for Drive in string.ascii_uppercase:
-        for path in PossiblePaths:
-            path = path.replace("X", Drive)
-            if os.path.exists(path):
-                ValidHardPaths.append(path)
-    if len(ValidHardPaths) == 0:
-        cprint("Steam not found. Please enter path to steam.exe", 'red', attrs=['bold'])
-        steamPath = input()
-    elif len(ValidHardPaths) == 1:
-        steamPath = ValidHardPaths[0]
-        cprint(f"Steam found at {steamPath}", 'green', attrs=['bold'])
-    else:
-        cprint("Steam found at multiple locations:", 'yellow', attrs=['bold'])
-        for i in range(len(ValidHardPaths)):
-            cprint(f"{i+1}. {ValidHardPaths[i]}", 'white', attrs=['bold'])
-        cprint("Please enter number of correct path", 'yellow', attrs=['bold'])
-        steamPath = ValidHardPaths[int(input(':'))-1]
     data = open('config.json', 'w')
-    data.write(json.dumps({"steampath": steamPath, "cmdcommand": "start \"\" STEAMPATH -login LOGIN PASSWORD -language russian -applaunch 730 -low -nohltv -nosound -novid -window -w 640 -h 480 +connect 192.168.1.106:27027 +exec farm.cfg -x X -y Y"}))
+    data.write(json.dumps({"steamcmdpath": get_steamcmdpath(), "steampath": get_steampath(), "cmdcommand": "start \"\" STEAMPATH -login LOGIN PASSWORD -language russian -applaunch 730 -low -nohltv -nosound -novid -window -w 640 -h 480 +connect IP +exec farm.cfg -x X -y Y"}))
     data.close()
     data = open('config.json', 'r')
     cprint("Config file loaded.", 'green', attrs=['bold'])
+
 jsondata = json.load(data)
-cmdstring = jsondata["cmdcommand"].replace('STEAMPATH', jsondata["steampath"])
+steamcmdpath = jsondata["steamcmdpath"]
+cmdstring = jsondata["cmdcommand"].replace('STEAMPATH', jsondata["steampath"]).replace('IP', get_local_ip() + ":27027")
 sh = []
 accounts = []
 update_spreadsheet()
 if len(accounts)==0:
     cprint("No accounts found.", 'red', attrs=['bold'])
-
+coordinates_dict = {}
 while 1: # main loop
     try:
         mode, *args = input(":").lower().split()
@@ -279,9 +335,26 @@ while 1: # main loop
     if mode in ['help']:
         help()
     elif mode in ['start']:
-        start_instances(accounts, '--test' in args or '-t' in args)
+        isTesting = '--test' in args or '-t' in args
+        if '--restart' in args or '-r' in args:
+            n = int(input(colored(f"Enter account number to restart: ", 'yellow', attrs=['bold'])))
+            if n > len(coordinates_dict):
+                cprint(f"Account number {n} was not started.", 'red', attrs=['bold'])
+                continue
+            
+            restart_account(accounts, n, isTesting)
+            continue
+        path = steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\logs\\"
+        for file in os.listdir(path):
+            try:
+                os.remove(path + file)
+            except PermissionError:
+                pass
+        if not isTesting: start_server()
+        start_instances(accounts, isTesting)
+        
     elif mode in ['update']:
-        update_spreadsheet()
+        update_server()
     elif mode in ['list']:
         list_accounts()
     elif mode in ['price']:
