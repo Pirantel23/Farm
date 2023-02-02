@@ -1,5 +1,4 @@
 import pyautogui as pg
-import tkinter as tk
 from random import choices
 import json
 import string
@@ -13,15 +12,18 @@ from datetime import datetime
 from sys import exit
 from subprocess import Popen
 import socket
+from rcon.source import Client
 
 def help():
     cprint("<LIST OF ALL COMMANDS>", 'green', attrs=['bold'])
     cprint("  ● Show this message: help", 'white')
+    cprint("  ● Start server: server", 'white')
     cprint("  ● Start instances: start --test/-t/-T for testing mode --restart/-r/-R to restart account", 'white')
     cprint("  ● Update server: update", 'white')
     cprint("  ● List accounts: list", 'white')
     cprint("  ● Price drops: price --specific/-s/-S to update specific drops", 'white')
     cprint("  ● Get inventory: inventory --drops/-d/-D to show drops only", 'white')
+    cprint("  ● Enable RCON connection: rcon", 'white')
     cprint("  ● Exit: exit", 'white')
 
 def price_drops(specific_drop):
@@ -160,13 +162,13 @@ def start_instances(sheet1, isTesting):
         if ans=='y': break
     selectedAccounts = list(selectedAccounts)
     cprint("Calculating distribution...", 'yellow', attrs=['bold'])
-    root = tk.Tk()
-    root.geometry(f"{width//10}x{height//10}")
-    root.title("Distribution")
-    root.resizable(False, False)
-    colors = [f"#{''.join(choices(string.hexdigits, k=6))}" for i in range(n)]
-    screens = [tk.Frame(root,width=40, height=30, bg=colors[i]) for i in range(n)]
-    labels = [tk.Label(screens[i], text = f"{selectedAccounts[i]}", font="Arial 10 bold", bg = colors[i]) for i in range(n)]
+    #root = tk.Tk()
+    #root.geometry(f"{width//10}x{height//10}")
+    #root.title("Distribution")
+    #root.resizable(False, False)
+    #colors = [f"#{''.join(choices(string.hexdigits, k=6))}" for i in range(n)]
+    #screens = [tk.Frame(root,width=40, height=30, bg=colors[i]) for i in range(n)]
+    #labels = [tk.Label(screens[i], text = f"{selectedAccounts[i]}", font="Arial 10 bold", bg = colors[i]) for i in range(n)]
     distributions = [(i, j) for j in range(1, n+1) for i in range(1, n+1) if i*j >= n and i*400 < width and j*300 < height]
     distributions.sort(key = lambda x: abs(x[0]-x[1]))
     distributions.sort(key = lambda x: abs(x[0]*x[1] - n))
@@ -177,10 +179,10 @@ def start_instances(sheet1, isTesting):
     coordinates_dict = {str(selectedAccounts[i]):windowsCoordinates[i] for i in range(n)}
     cprint("Distribution calculated. Screenspace coordinates:", 'white', attrs=['bold'])
     for i in range(n): print("Account {}: {}".format(selectedAccounts[i], windowsCoordinates[i]))
-    for i in range(n):
-        screens[i].place(x=windowsCoordinates[i][0]//10, y=windowsCoordinates[i][1]//10)
-        screens[i].pack_propagate(False)
-        labels[i].place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+    #for i in range(n):
+    #    screens[i].place(x=windowsCoordinates[i][0]//10, y=windowsCoordinates[i][1]//10)
+    #    screens[i].pack_propagate(False)
+    #    labels[i].place(relx=0.5, rely=0.5, anchor=tk.CENTER)
     for i in range(n):
         accountActivationString = cmdstring.replace('X', str(windowsCoordinates[i][0])).replace('Y', str(windowsCoordinates[i][1]))
         if '-login' in cmdstring:
@@ -192,7 +194,7 @@ def start_instances(sheet1, isTesting):
         else:
             os.system(accountActivationString)
             time.sleep(1)
-    root.mainloop()
+    #root.mainloop()
 
 def get_steampath():
     PossiblePaths = [r"X:\Steam\steam.exe", r"X:\Program Files\Steam\steam.exe", r"X:\Program Files (x86)\Steam\steam.exe"]
@@ -264,6 +266,36 @@ def get_local_ip():
         s.close()
     return IP
 
+def rcon_connection():
+    path = steamcmdpath + '\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\cfg\\server.cfg'
+    with open(path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+        for line in lines:
+            if line.startswith('rcon_password'):
+                password = line.split(' ')[1].replace('"', '')
+                cprint('RCON password: ' + password, 'green', attrs=['bold'])
+                break
+        else:
+            cprint('RCON password not found', 'red', attrs=['bold'])
+            return
+    
+    command = ''
+    cprint('Enter "quit" to exit', 'yellow', attrs=['bold'])
+    try:
+        client = Client(local_ip, 27027, passwd=password)
+        client.connect(login=True)
+        cprint('Connected to RCON', 'green', attrs=['bold'])
+    except ConnectionRefusedError:
+        cprint('Connection refused', 'red', attrs=['bold'])
+        return
+    while 1:
+        command = input(colored(':>', 'white', attrs=['bold']))
+        if command == 'quit': break
+        response = client.run(command)
+        cprint(response, 'white')
+        if command == 'exit': break
+
+
 Drops = {"Fracture Case": r"Fracture%20Case",
          "Dreams and Nightmares Case": r"Dreams%20%26%20Nightmares%20Case",
          "Recoil Case": r"Recoil%20Case",
@@ -320,7 +352,8 @@ except FileNotFoundError:
 
 jsondata = json.load(data)
 steamcmdpath = jsondata["steamcmdpath"]
-cmdstring = jsondata["cmdcommand"].replace('STEAMPATH', jsondata["steampath"]).replace('IP', get_local_ip() + ":27027")
+local_ip = get_local_ip()
+cmdstring = jsondata["cmdcommand"].replace('STEAMPATH', jsondata["steampath"]).replace('IP',  local_ip + ":27027")
 sh = []
 accounts = []
 update_spreadsheet()
@@ -334,6 +367,8 @@ while 1: # main loop
         continue
     if mode in ['help']:
         help()
+    elif mode in ['rcon']:
+        rcon_connection()
     elif mode in ['start']:
         isTesting = '--test' in args or '-t' in args
         if '--restart' in args or '-r' in args:
@@ -344,15 +379,15 @@ while 1: # main loop
             
             restart_account(accounts, n, isTesting)
             continue
+        start_instances(accounts, isTesting)
+    elif mode in ['server']:
         path = steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\logs\\"
         for file in os.listdir(path):
             try:
                 os.remove(path + file)
             except PermissionError:
                 pass
-        if not isTesting: start_server()
-        start_instances(accounts, isTesting)
-        
+        start_server()
     elif mode in ['update']:
         update_server()
     elif mode in ['list']:
