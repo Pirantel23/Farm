@@ -8,11 +8,12 @@ import gspread
 from termcolor import colored, cprint
 import requests
 from colorama import just_fix_windows_console
-from datetime import datetime
+from datetime import datetime, timedelta
 from sys import exit
 from subprocess import Popen
 import socket
 from rcon.source import Client
+import keyboard
 
 def help():
     cprint("<LIST OF ALL COMMANDS>", 'green', attrs=['bold'])
@@ -23,7 +24,8 @@ def help():
     cprint("  ● List accounts: list", 'white')
     cprint("  ● Price drops: price --specific/-s/-S to update specific drops", 'white')
     cprint("  ● Get inventory: inventory --drops/-d/-D to show drops only", 'white')
-    cprint("  ● Enable RCON connection: rcon", 'white')
+    cprint("  ● Enable RCON connection: rcon --command/-c/-C to send commands", 'white')
+    cprint("  ● Monitor drops: monitor", 'white')
     cprint("  ● Exit: exit", 'white')
 
 def price_drops(specific_drop):
@@ -47,7 +49,7 @@ def price_drops(specific_drop):
         time.sleep(0.1)
         price = None
         try:
-            r = requests.get("https://steamcommunity.com/market/priceoverview/?country=RU&currency=5&appid=730&market_hash_name=" + Drops[drop])
+            r = requests.get("https://steamcommunity.com/market/priceoverview/?country=RU&currency=5&appid=730&market_hash_name=" + Drops[drop][0])
             price = r.json()["lowest_price"]
             price = price.replace(" pуб.", "") # deleting " pуб." from price
             sheet.update_acell(f"C{drops.index(drop)+2}", price) 
@@ -160,7 +162,7 @@ def start_instances(sheet1, isTesting):
             continue
         ans = input(colored("Are you sure you want to select {} accounts? (y/n): ".format(n), 'yellow', attrs=['bold']))
         if ans=='y': break
-    selectedAccounts = list(selectedAccounts)
+    selectedAccounts = sorted(list(selectedAccounts))
     cprint("Calculating distribution...", 'yellow', attrs=['bold'])
     #root = tk.Tk()
     #root.geometry(f"{width//10}x{height//10}")
@@ -194,7 +196,6 @@ def start_instances(sheet1, isTesting):
         else:
             os.system(accountActivationString)
             time.sleep(1)
-    #root.mainloop()
 
 def get_steampath():
     PossiblePaths = [r"X:\Steam\steam.exe", r"X:\Program Files\Steam\steam.exe", r"X:\Program Files (x86)\Steam\steam.exe"]
@@ -240,8 +241,51 @@ def start_server():
     Popen("srcds -game csgo -console -usercon -nobots -port 27027 -usercon -console +game_type 0 +game_mode 0 +mapgroup mg_custom +map achievement_idle +sv_logflush 1 +log on +sv_log_onefile 1",
     cwd=steamcmdpath + r"\steamapps\common\Counter-Strike Global Offensive Beta - Dedicated Server", shell=True)
 
+def check_drops(logs):
+    #example: L 07/26/2020 - 22:53:56: [DropsSummoner.smx] Игроку XyLiGaN<226><STEAM_1:0:558287561><> выпало [4281-0-1-4]
+    for log in logs:
+        if '[DropsSummoner.smx]' not in log: continue
+        log = log.split(' ')
+        player = log[6]
+        player = player[:player.find('<')]
+        drop = log[8]
+        drop = drop.split('-')[0][1:]
+        for skin, r in Drops.items():
+            if r[1] == drop:
+                drop = skin
+        now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        cprint(f"Player {player} received {drop}  {now}", 'white', attrs=['bold'])
+        sheet2 = sh.get_worksheet(2)
+        i = len(sheet2.get_all_records()) + 2
+        sheet2.update_acell(f"A{i}", player)
+        sheet2.update_acell(f"B{i}", drop)
+        sheet2.update_acell(f"C{i}", now)
+
 def monitor_drops():
+    global last_log
+    path = steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\logs\\"
+    dir = os.listdir(path)
+    if len(dir) == 0:
+        cprint("No logs found. Please start server first.", 'red', attrs=['bold'])
+        return
+    interval = 10
+    before = datetime.now()
+    before -= timedelta(seconds=interval)
     cprint("Monitoring drops...", 'yellow', attrs=['bold'])
+    cprint("Press 'q' to stop monitoring.", 'yellow', attrs=['bold'])
+    while not keyboard.is_pressed('q'):
+        now = datetime.now()
+        if (now - before).seconds < interval: continue
+        before = datetime.now()
+        logs = open(path + dir[0], 'r', encoding= 'utf-8').read().split('\n')[:-1]
+        new_logs = logs[len(last_log):]
+        last_log = logs
+        n = len(new_logs)
+        if n>0:
+            cprint(f"Found {n} new logs:", 'blue', attrs=['bold'])
+            check_drops(new_logs)
+        else:
+            cprint("No new logs", 'red', attrs=['bold'])      
     
 def restart_account(sheet1, account_number, isTesting):
     accounts = {str(n+1):{"login":str(i['Логин']), "password":str(i['Пароль'])} for n,i in enumerate(sheet1)}
@@ -266,7 +310,7 @@ def get_local_ip():
         s.close()
     return IP
 
-def rcon_connection():
+def get_rconpassword():
     path = steamcmdpath + '\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\cfg\\server.cfg'
     with open(path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
@@ -278,60 +322,58 @@ def rcon_connection():
         else:
             cprint('RCON password not found', 'red', attrs=['bold'])
             return
-    
-    command = ''
-    cprint('Enter "quit" to exit', 'yellow', attrs=['bold'])
+    return password
+
+def rcon_command(client, command):
+    response = client.run(command)
+    cprint(response, 'white')
+
+def rcon_connection():
     try:
-        client = Client(local_ip, 27027, passwd=password)
+        client = Client(local_ip, 27027, passwd=get_rconpassword())
         client.connect(login=True)
         cprint('Connected to RCON', 'green', attrs=['bold'])
+        return client
     except ConnectionRefusedError:
         cprint('Connection refused', 'red', attrs=['bold'])
         return
-    while 1:
-        command = input(colored(':>', 'white', attrs=['bold']))
-        if command == 'quit': break
-        response = client.run(command)
-        cprint(response, 'white')
-        if command == 'exit': break
 
-
-Drops = {"Fracture Case": r"Fracture%20Case",
-         "Dreams and Nightmares Case": r"Dreams%20%26%20Nightmares%20Case",
-         "Recoil Case": r"Recoil%20Case",
-         "Clutch Case": r"Clutch%20Case",
-         "Snakebite Case": r"Snakebite%20Case",
-         "Operation Phoenix Weapon Case": r"Operation%20Phoenix%20Weapon%20Case",
-         "Huntsman Weapon Case": r"Huntsman%20Weapon%20Case",
-         "CS:GO Weapon Case": r"CS%3AGO%20Weapon%20Case",
-         "Operation Bravo Case": r"Operation%20Bravo%20Case",
-         "Spectrum Case": r"Spectrum%20Case",
-         "Sticker Capsule": r"Sticker%20Capsule",
-         "Danger Zone Case": r"Danger%20Zone%20Case",
-         "Chroma 2 Case": r"Chroma%202%20Case",
-         "Operation Wildfire Case": r"Operation%20Wildfire%20Case",
-         "Spectrum 2 Case": r"Spectrum%202%20Case",
-         "Chroma Case": r"Chroma%20Case",
-         "Community Sticker Capsule 1": r"Community%20Sticker%20Capsule%201",
-         "Winter Offensive Weapon Case": r"Winter%20Offensive%20Weapon%20Case",
-         "Sticker Capsule 2": r"Sticker%20Capsule%202",
-         "Prisma Case": r"Prisma%20Case",
-         "Horizon Case": r"Horizon%20Case",
-         "Falchion Case": r"Falchion%20Case",
-         "Operation Vanguard Weapon Case": r"Operation%20Vanguard%20Weapon%20Case",
-         "Gamma Case": r"Gamma%20Case",
-         "Prisma 2 Case": r"Prisma%202%20Case",
-         "Shadow Case": r"Shadow%20Case",
-         "Glove Case": r"Glove%20Case",
-         "Revolver Case": r"Revolver%20Case",
-         "Operation Hydra Case": r"Operation%20Hydra%20Case",
-         "CS20 Case": r"CS20%20Case",
-         "Operation Breakout Weapon Case": r"Operation%20Breakout%20Weapon%20Case",
-         "CS:GO Weapon Case 2": r"CS%3AGO%20Weapon%20Case%202",
-         "CS:GO Weapon Case 3": r"CS%3AGO%20Weapon%20Case%203",
-         "Gamma 2 Case": r"Gamma%202%20Case",
-         "Chroma 3 Case": r"Chroma%203%20Case",
-        }
+Drops = {'Fracture Case': ('Fracture%20Case',"4698"),
+         'Dreams and Nightmares Case': ('Dreams%20%26%20Nightmares%20Case',"4818"),
+         'Recoil Case': ('Recoil%20Case',"4846"),
+         'Clutch Case': ('Clutch%20Case',"4471"),
+         'Snakebite Case': ('Snakebite%20Case',"4747"),
+         'Operation Phoenix Weapon Case': ('Operation%20Phoenix%20Weapon%20Case',"4011"),
+         'Huntsman Weapon Case': ('Huntsman%20Weapon%20Case',"4017"),
+         'CS:GO Weapon Case': ('CS%3AGO%20Weapon%20Case',"4001"),
+         'Operation Bravo Case': ('Operation%20Bravo%20Case',"4003"),
+         'Spectrum Case': ('Spectrum%20Case',"4351"),
+         'Sticker Capsule': ('Sticker%20Capsule',"4007"),
+         'Danger Zone Case': ('Danger%20Zone%20Case',"4548"),
+         'Chroma 2 Case': ('Chroma%202%20Case',"4089"),
+         'Operation Wildfire Case': ('Operation%20Wildfire%20Case',"4187"),
+         'Spectrum 2 Case': ('Spectrum%202%20Case',"4403"),
+         'Chroma Case': ('Chroma%20Case',"4061"),
+         'Community Sticker Capsule 1': ('Community%20Sticker%20Capsule%201',"4016"),
+         'Winter Offensive Weapon Case': ('Winter%20Offensive%20Weapon%20Case',"4009"),
+         'Sticker Capsule 2': ('Sticker%20Capsule%202',"4012"),
+         'Prisma Case': ('Prisma%20Case',"4598"),
+         'Horizon Case': ('Horizon%20Case',"4482"),
+         'Falchion Case': ('Falchion%20Case',"4091"),
+         'Operation Vanguard Weapon Case': ('Operation%20Vanguard%20Weapon%20Case',"4029"),
+         'Gamma Case': ('Gamma%20Case',"4236"),
+         'Prisma 2 Case': ('Prisma%202%20Case',"4695"),
+         'Shadow Case': ('Shadow%20Case',"4138"),
+         'Glove Case': ('Glove%20Case',"4288"),
+         'Revolver Case': ('Revolver%20Case',"4186"),
+         'Operation Hydra Case': ('Operation%20Hydra%20Case',"4352"),
+         'CS20 Case': ('CS20%20Case',"4669"),
+         'Operation Breakout Weapon Case': ('Operation%20Breakout%20Weapon%20Case',"4018"),
+         'CS:GO Weapon Case 2': ('CS%3AGO%20Weapon%20Case%202',"4004"),
+         'CS:GO Weapon Case 3': ('CS%3AGO%20Weapon%20Case%203',"4010"),
+         'Gamma 2 Case': ('Gamma%202%20Case',"4281"),
+         'Chroma 3 Case': ('Chroma%203%20Case',"4233")
+         }
 
 just_fix_windows_console()
 
@@ -354,12 +396,14 @@ jsondata = json.load(data)
 steamcmdpath = jsondata["steamcmdpath"]
 local_ip = get_local_ip()
 cmdstring = jsondata["cmdcommand"].replace('STEAMPATH', jsondata["steampath"]).replace('IP',  local_ip + ":27027")
+
 sh = []
 accounts = []
 update_spreadsheet()
 if len(accounts)==0:
     cprint("No accounts found.", 'red', attrs=['bold'])
 coordinates_dict = {}
+last_log = []
 while 1: # main loop
     try:
         mode, *args = input(":").lower().split()
@@ -367,14 +411,24 @@ while 1: # main loop
         continue
     if mode in ['help']:
         help()
+    elif mode in ['monitor']:
+        monitor_drops()
     elif mode in ['rcon']:
-        rcon_connection()
+        client = rcon_connection()
+        if client and ('--command' in args or '-c' in args):
+            cprint("Enter 'quit' to exit RCON", 'yellow', attrs=['bold'])
+            while 1:
+                command = input(colored(':>', 'white', attrs=['bold']))
+                if command == 'quit': break
+                rcon_command(client, command)
+                if command == 'exit': break
     elif mode in ['start']:
         isTesting = '--test' in args or '-t' in args
         if '--restart' in args or '-r' in args:
-            n = int(input(colored(f"Enter account number to restart: ", 'yellow', attrs=['bold'])))
-            if n > len(coordinates_dict):
+            n = input(colored(f"Enter account number to restart: ", 'yellow', attrs=['bold']))
+            if n not in coordinates_dict.keys():
                 cprint(f"Account number {n} was not started.", 'red', attrs=['bold'])
+                cprint(f"List of started accounts: {' '.join(coordinates_dict.keys())}", 'red', attrs=['bold'])
                 continue
             
             restart_account(accounts, n, isTesting)
@@ -387,6 +441,7 @@ while 1: # main loop
                 os.remove(path + file)
             except PermissionError:
                 pass
+        last_log = []
         start_server()
     elif mode in ['update']:
         update_server()
