@@ -14,6 +14,8 @@ from subprocess import Popen
 import socket
 from rcon.source import Client
 import keyboard
+from steampy.models import GameOptions, Asset
+from steampy.client import SteamClient
 
 def help():
     cprint("<LIST OF ALL COMMANDS>", 'green', attrs=['bold'])
@@ -26,6 +28,7 @@ def help():
     cprint("  ● Get inventory: inventory --drops/-d/-D to show drops only", 'white')
     cprint("  ● Enable RCON connection: rcon --command/-c/-C to send commands", 'white')
     cprint("  ● Monitor drops: monitor", 'white')
+    cprint("  ● Send trade offer: trade --drop/-d/-D to send to central", 'white')
     cprint("  ● Exit: exit", 'white')
 
 def price_drops(specific_drop):
@@ -58,7 +61,7 @@ def price_drops(specific_drop):
         except TypeError:
             cprint(f"  ● {drop}: Not updated", 'red', attrs=['bold'])
 
-def get_inventory(steamid, drops_only):
+def get_inventory(steamid, drops_only, toTrade = False):
     cprint(f"Accessing inventory of {steamid}", 'yellow', attrs=['bold'])
     data = requests.get(f'https://steamcommunity.com/inventory/{steamid}/730/2?l=english&count=5000')
     if data.status_code == 200: cprint(f"Inventory {steamid} loaded", 'green', attrs=['bold'])
@@ -79,6 +82,11 @@ def get_inventory(steamid, drops_only):
     if inventory_count == 0:
         cprint(f"Inventory of {steamid} is empty", 'red', attrs=['bold'])
         return
+    if toTrade:
+        assets = [(Asset(asset['assetid'], GameOptions('730','2'), asset['amount']), asset['classid']) for asset in json_data['assets']]
+        descriptions = {description['classid']:description['tradable'] for description in json_data['descriptions']}
+        tradable_assets = [asset[0] for asset in assets if descriptions[asset[1]] == 1]
+        return tradable_assets
     assets = json_data['assets']
     descriptions = json_data['descriptions']
     items = {}
@@ -254,7 +262,8 @@ def check_drops(logs):
             if r[1] == drop:
                 drop = skin
         now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-        cprint(f"Player {player} received {drop}  {now}", 'white', attrs=['bold'])
+        cprint(f"Account {player} received {drop}  {now}", 'white', attrs=['bold'])
+        send_trade(player, '76561198064460092')
         sheet2 = sh.get_worksheet(2)
         i = len(sheet2.get_all_records()) + 2
         sheet2.update_acell(f"A{i}", player)
@@ -338,6 +347,25 @@ def rcon_connection():
         cprint('Connection refused', 'red', attrs=['bold'])
         return
 
+def send_trade(account_number, othersteamid):
+    api_key = accounts[account_number - 1]['API']
+    login = accounts[account_number - 1]['Логин']
+    password = accounts[account_number - 1]['Пароль']
+    steamid = accounts[account_number - 1]['SteamID']
+    secret = accounts[account_number - 1]['SECRET']
+    tradable_assets = get_inventory(steamid, False, True)
+    if tradable_assets is None:
+        cprint(f"Account {account_number} has no tradable items", 'red', attrs=['bold'])
+        return
+    cprint(f'Found {len(tradable_assets)} tradable items', 'green', attrs=['bold'])
+    try:
+        with SteamClient(api_key, login, password, secret) as client:
+            client.make_offer(tradable_assets, [], othersteamid, 'hi')
+            cprint(f"Trade offer sent to {othersteamid}", 'green', attrs=['bold'])
+    except Exception as e:
+        cprint(f"Error: {e}", 'red', attrs=['bold'])
+        return
+    
 Drops = {'Fracture Case': ('Fracture%20Case',"4698"),
          'Dreams and Nightmares Case': ('Dreams%20%26%20Nightmares%20Case',"4818"),
          'Recoil Case': ('Recoil%20Case',"4846"),
@@ -411,6 +439,11 @@ while 1: # main loop
         continue
     if mode in ['help']:
         help()
+    elif mode in ['trade']:
+        this = int(input(colored("Enter sender account number: ", 'yellow', attrs=['bold'])))
+        other = '76561198064460092' if '--drop' in args or '-d' in args else input(colored("Enter receiver steamid: ", 'yellow', attrs=['bold']))
+        cprint(f"Sending trade from {this} to {other}", 'yellow', attrs=['bold'])
+        send_trade(this, other)
     elif mode in ['monitor']:
         monitor_drops()
     elif mode in ['rcon']:
