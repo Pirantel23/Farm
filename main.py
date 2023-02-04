@@ -17,7 +17,7 @@ import keyboard
 from steampy.models import GameOptions, Asset
 from steampy.client import SteamClient
 
-def help():
+def help() -> None:
     cprint("<LIST OF ALL COMMANDS>", 'green', attrs=['bold'])
     cprint("  ● Show this message: help", 'white')
     cprint("  ● Start server: server", 'white')
@@ -31,7 +31,7 @@ def help():
     cprint("  ● Send trade offer: trade --drop/-d/-D to send to central", 'white')
     cprint("  ● Exit: exit", 'white')
 
-def price_drops(specific_drop):
+def price_drops(specific_drop: bool) -> None:
     chosen_drops = []
     drops = list(Drops.keys())
     if not specific_drop: chosen_drops = drops
@@ -61,7 +61,7 @@ def price_drops(specific_drop):
         except TypeError:
             cprint(f"  ● {drop}: Not updated", 'red', attrs=['bold'])
 
-def get_inventory(steamid, drops_only, toTrade = False):
+def get_inventory(steamid: str, drops_only: bool, toTrade: bool = False) -> dict/list:
     cprint(f"Accessing inventory of {steamid}", 'yellow', attrs=['bold'])
     data = requests.get(f'https://steamcommunity.com/inventory/{steamid}/730/2?l=english&count=5000')
     if data.status_code == 200: cprint(f"Inventory {steamid} loaded", 'green', attrs=['bold'])
@@ -111,12 +111,12 @@ def get_inventory(steamid, drops_only, toTrade = False):
                 del inventory[item]
     return inventory
 
-def list_accounts():
+def list_accounts() -> None:
     cprint("<LIST OF ALL ACCOUNTS>", 'green', attrs=['bold'])
     for i in accounts:
         cprint(f"  ● Account {i['Номер']}: {i['SteamID']} {i['Логин']}:{i['Пароль']} {i['Телефон']} {i['Почта']}",'white')
 
-def update_spreadsheet():
+def update_spreadsheet() -> None:
     global sh, accounts
     cprint("Updating spreadsheet...", 'yellow', attrs=['bold'])
     try:
@@ -141,7 +141,7 @@ def update_spreadsheet():
     accounts = sh.sheet1.get_all_records()
     cprint("Loaded {} accounts".format(len(accounts)), 'green', attrs=['bold'])
 
-def start_instances(sheet1, isTesting):
+def start_instances(sheet1: property, isTesting: bool) -> None:
     global coordinates_dict
     accounts = {str(n+1):{"login":str(i['Логин']), "password":str(i['Пароль'])} for n,i in enumerate(sheet1)}
     width, height = pg.size()
@@ -205,7 +205,7 @@ def start_instances(sheet1, isTesting):
             os.system(accountActivationString)
             time.sleep(1)
 
-def get_steampath():
+def get_steampath() -> str:
     PossiblePaths = [r"X:\Steam\steam.exe", r"X:\Program Files\Steam\steam.exe", r"X:\Program Files (x86)\Steam\steam.exe"]
     ValidHardPaths = []
     for Drive in string.ascii_uppercase:
@@ -227,7 +227,7 @@ def get_steampath():
         steamPath = ValidHardPaths[int(input(':'))-1]
     return steamPath
 
-def get_steamcmdpath():
+def get_steamcmdpath() -> str:
     cprint("SteamCMD path not set.", 'yellow', attrs=['bold'])
     drives = [ chr(x) + ":" for x in range(65,91) if os.path.exists(chr(x) + ":") ]
     steamcmdpath = ''
@@ -240,16 +240,16 @@ def get_steamcmdpath():
     cprint(f"SteamCMD found at: {steamcmdpath}\\steamcmd.exe", 'green', attrs=['bold'])
     return steamcmdpath
 
-def update_server():
+def update_server() -> None:
     cprint("Updating server...", 'yellow', attrs=['bold'])
     Popen('steamcmd.exe +login anonymous +app_update 740 validate +quit', cwd=steamcmdpath, shell=True)
 
-def start_server():
+def start_server() -> None:
     cprint("Starting server...", 'yellow', attrs=['bold'])
     Popen("srcds -game csgo -console -usercon -nobots -port 27027 -usercon -console +game_type 0 +game_mode 0 +mapgroup mg_custom +map achievement_idle +sv_logflush 1 +log on +sv_log_onefile 1",
     cwd=steamcmdpath + r"\steamapps\common\Counter-Strike Global Offensive Beta - Dedicated Server", shell=True)
 
-def check_drops(logs):
+def check_drops(logs: list) -> None:
     #example: L 07/26/2020 - 22:53:56: [DropsSummoner.smx] Игроку XyLiGaN<226><STEAM_1:0:558287561><> выпало [4281-0-1-4]
     for log in logs:
         if '[DropsSummoner.smx]' not in log: continue
@@ -270,7 +270,7 @@ def check_drops(logs):
         sheet2.update_acell(f"B{i}", drop)
         sheet2.update_acell(f"C{i}", now)
 
-def monitor_drops():
+def monitor_drops() -> None:
     global last_log
     path = steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\logs\\"
     dir = os.listdir(path)
@@ -296,7 +296,7 @@ def monitor_drops():
         else:
             cprint("No new logs", 'red', attrs=['bold'])      
     
-def restart_account(sheet1, account_number, isTesting):
+def restart_account(sheet1: property, account_number: int, isTesting: bool) -> None:
     accounts = {str(n+1):{"login":str(i['Логин']), "password":str(i['Пароль'])} for n,i in enumerate(sheet1)}
     cprint(f"Restarting account {account_number}...", 'yellow', attrs=['bold'])   
     account = accounts[str(account_number)] # accounts is a dictionary
@@ -307,7 +307,7 @@ def restart_account(sheet1, account_number, isTesting):
         os.system(accountActivationString)
     else: cprint("Testing mode. Skipping lauching...", 'yellow', attrs=['bold'])
 
-def get_local_ip():
+def get_local_ip() -> str:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         # doesn't even have to be reachable
@@ -319,7 +319,7 @@ def get_local_ip():
         s.close()
     return IP
 
-def get_rconpassword():
+def get_rconpassword() -> str:
     path = steamcmdpath + '\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\cfg\\server.cfg'
     with open(path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
@@ -333,11 +333,11 @@ def get_rconpassword():
             return
     return password
 
-def rcon_command(client, command):
+def rcon_command(client: Client, command: str) -> None:
     response = client.run(command)
     cprint(response, 'white')
 
-def rcon_connection():
+def rcon_connection() -> Client:
     try:
         client = Client(local_ip, 27027, passwd=get_rconpassword())
         client.connect(login=True)
@@ -347,7 +347,7 @@ def rcon_connection():
         cprint('Connection refused', 'red', attrs=['bold'])
         return
 
-def send_trade(account_number, othersteamid):
+def send_trade(account_number: int, othersteamid: str) -> None:
     api_key = accounts[account_number - 1]['API']
     login = accounts[account_number - 1]['Логин']
     password = accounts[account_number - 1]['Пароль']
@@ -365,7 +365,7 @@ def send_trade(account_number, othersteamid):
     except Exception as e:
         cprint(f"Error: {e}", 'red', attrs=['bold'])
         return
-    
+
 Drops = {'Fracture Case': ('Fracture%20Case',"4698"),
          'Dreams and Nightmares Case': ('Dreams%20%26%20Nightmares%20Case',"4818"),
          'Recoil Case': ('Recoil%20Case',"4846"),
