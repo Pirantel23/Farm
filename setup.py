@@ -1,9 +1,3 @@
-import PyInstaller.__main__
 import os
     
-PyInstaller.__main__.run([  
-     'main.py',
-     '--onefile',
-     '--uac-admin',
-     '-i=icon.ico'                                 
-])
+os.system('pyinstaller --noconfirm --windowed --uac-admin --icon icon.ico --onefile --add-data "C:\Users\gore\AppData\Roaming\Python\Python311\site-packages\customtkinter;customtkinter" main.py')
