@@ -11,6 +11,7 @@ from rcon.source import Client
 import socket
 from datetime import datetime
 import pyautogui as pg
+from time import sleep
 
 ctk.set_default_color_theme('green')
 
@@ -251,25 +252,23 @@ class Methods(ctk.CTkFrame):
         else: self.log("Testing mode. Skipping lauching...", 'yellow')
 
     def ResetLogs(self):
-        path = self.steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\logs\\"
+        path = self.steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\addons\\sourcemod\\logs\\"
         for file in os.listdir(path):
             try:
                 os.remove(path + file)
                 self.log(f"[MONITORING] Deleted old logs", 'cyan')
             except PermissionError:
                 pass
+        open(path + "DropsSummoner.log", 'w', encoding= 'utf-8').close()
 
     def MonitorDrops(self):
-        path = self.steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\logs\\"
-        dir = os.listdir(path)
+        path = self.steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\addons\\sourcemod\\logs\\DropsSummoner.log"
+        self.update()
         if self.serverstatus.status == 'NO':
             self.log("[MONITORING] Server stopped.", 'red')
             return
-        if len(dir) == 0:
-            self.log("[MONITORING] No logs found. Please start server first.", 'red')
-            return
         else:
-            logs = open(path + dir[0], 'r', encoding= 'utf-8').read().split('\n')
+            logs = open(path, 'r', encoding= 'utf-8').read().split('\n')
             new_logs = logs[len(self.last_logs):]
             self.last_logs = logs
             n = len(new_logs)
@@ -283,8 +282,16 @@ class Methods(ctk.CTkFrame):
     def CheckDrops(self, sheet: gspread.Worksheet, logs: list):
         #example: L 07/26/2020 - 22:53:56: [DropsSummoner.smx] Игроку XyLiGaN<226><STEAM_1:0:558287561><> выпало [4281-0-1-4]
         for log in logs:
+            sleep(1)
+            self.update()
             if 'DropsSummoner' not in log: continue
+            sleep(1)
             log = log.split(' ')
+            d1 = log[1].split('/')
+            month = d1[0]
+            day = d1[1]
+            year = d1[2]
+            date = f"{day}.{month}.{year} {log[3][:-1]}"
             player = log[6]
             player = player[:player.find('<')]
             drop = log[8]
@@ -292,8 +299,7 @@ class Methods(ctk.CTkFrame):
             for skin in self.parent.utils.drops:
                 if skin.dropid == drop:
                     drop = skin
-            now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-            self.log(f"Account {player} received {drop.name}  {now}", 'white')
+            self.log(f"Account {player} received {drop.name}  {date}", 'white')
             if self.autoTrading.get():
                 if not player.isdigit():
                     self.log(f"Account {player} is not digit. Cant trade", 'red')
@@ -302,7 +308,7 @@ class Methods(ctk.CTkFrame):
             i = len(sheet.get_all_records()) + 2
             sheet.update_acell(f"A{i}", player)
             sheet.update_acell(f"B{i}", drop.name)
-            sheet.update_acell(f"C{i}", now)      
+            sheet.update_acell(f"C{i}", date)      
 
     def UpdatePrices(self, index: int = 0):
         if index == 0:
@@ -341,7 +347,7 @@ class Methods(ctk.CTkFrame):
         self.ResetLogs()
         self.log("[SERVER] Starting server...", 'yellow')
         self.serverstatus.SetStatus('WAIT')
-        Popen("srcds -game csgo -console -usercon -nobots -port 27027 -usercon -console +game_type 0 +game_mode 0 +mapgroup mg_custom +map achievement_idle +sv_logflush 1 +log on +sv_log_onefile 1",
+        Popen("srcds -game csgo -console -usercon -nobots -port 27027 -usercon -console +game_type 0 +game_mode 0 +mapgroup mg_custom +map achievement_idle +sv_logflush 1",
         cwd=self.steamcmdpath + r"\steamapps\common\Counter-Strike Global Offensive Beta - Dedicated Server", shell=True)
         self.after(2000, self.RCONConnection)
 
