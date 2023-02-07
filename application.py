@@ -283,7 +283,7 @@ class Methods(ctk.CTkFrame):
     def CheckDrops(self, sheet: gspread.Worksheet, logs: list):
         #example: L 07/26/2020 - 22:53:56: [DropsSummoner.smx] Игроку XyLiGaN<226><STEAM_1:0:558287561><> выпало [4281-0-1-4]
         for log in logs:
-            if '[DropsSummoner.smx]' not in log: continue
+            if 'DropsSummoner' not in log: continue
             log = log.split(' ')
             player = log[6]
             player = player[:player.find('<')]
