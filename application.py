@@ -269,6 +269,8 @@ class Methods(ctk.CTkFrame):
             return
         else:
             logs = open(path, 'r', encoding= 'utf-8').read().split('\n')
+            #delete empty entries in logs
+            logs = [i for i in logs if i]
             new_logs = logs[len(self.last_logs):]
             self.last_logs = logs
             n = len(new_logs)
@@ -282,10 +284,8 @@ class Methods(ctk.CTkFrame):
     def CheckDrops(self, sheet: gspread.Worksheet, logs: list):
         #example: L 07/26/2020 - 22:53:56: [DropsSummoner.smx] Игроку XyLiGaN<226><STEAM_1:0:558287561><> выпало [4281-0-1-4]
         for log in logs:
-            sleep(1)
             self.update()
             if 'DropsSummoner' not in log: continue
-            sleep(1)
             log = log.split(' ')
             d1 = log[1].split('/')
             month = d1[0]
@@ -299,16 +299,16 @@ class Methods(ctk.CTkFrame):
             for skin in self.parent.utils.drops:
                 if skin.dropid == drop:
                     drop = skin
-            self.log(f"Account {player} received {drop.name}  {date}", 'white')
+            self.log(f"Account {player} received {drop.name}  {date}", 'green')
+            i = int(sheet.acell('F1').value) + 2
+            sheet.update_acell(f"A{i}", player)
+            sheet.update_acell(f"B{i}", drop.name)
+            sheet.update_acell(f"C{i}", date)   
             if self.autoTrading.get():
                 if not player.isdigit():
                     self.log(f"Account {player} is not digit. Cant trade", 'red')
                     continue
-                self.parent.accounts[int(player)-1].sendTrade()
-            i = len(sheet.get_all_records()) + 2
-            sheet.update_acell(f"A{i}", player)
-            sheet.update_acell(f"B{i}", drop.name)
-            sheet.update_acell(f"C{i}", date)      
+                self.parent.accounts[int(player)-1].sendTrade()       
 
     def UpdatePrices(self, index: int = 0):
         if index == 0:
