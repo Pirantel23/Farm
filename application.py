@@ -128,7 +128,7 @@ class Methods(ctk.CTkFrame):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.parent = parent
-        
+
         self.steampath = self.parent.utils.config['steampath']
         self.steamcmdpath = self.parent.utils.config['steamcmdpath']
         self.cmdcommand = self.parent.utils.config['cmdcommand']
@@ -461,7 +461,7 @@ class SteamAccount():
         try:
             client.make_offer(items, [], partner, f"Trade from {self.steamid}")
             self.log('Trade sent', 'green')
-        except Exception as e:
+        except ValueError:
             self.log('Trade sending failed', 'red')
             self.log(e)
             return
@@ -668,7 +668,7 @@ class Utils():
     def getAccounts(self) -> list[SteamAccount]:
         self.log("Getting accounts from Google Sheets", 'yellow')
         accounts = self.gc.sheet1.get_all_records()
-        accounts = [SteamAccount(self.app, account['Номер'], account['SteamID'], account['Логин'], account['Пароль'], account['API'], account['SECRET'], account['IDENTITY']) for account in accounts]
+        accounts = [SteamAccount(self.app, account['Номер'], str(account['SteamID']), account['Логин'], account['Пароль'], account['API'], account['SECRET'], account['IDENTITY']) for account in accounts]
         self.log(f"Loaded {len(accounts)} accounts", 'green')
         self.app.update()
         return accounts
