@@ -461,7 +461,7 @@ class SteamAccount():
         try:
             client.make_offer(items, [], partner, f"Trade from {self.steamid}")
             self.log('Trade sent', 'green')
-        except ValueError:
+        except Exception as e:
             self.log('Trade sending failed', 'red')
             self.log(e)
             return
