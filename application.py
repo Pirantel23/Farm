@@ -11,14 +11,13 @@ from rcon.source import Client
 import socket
 from datetime import datetime
 import pyautogui as pg
-from time import sleep
 
 ctk.set_default_color_theme('green')
 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.version = '1.0'
+        self.version = '1.4'
         self.width = 800
         self.height = 600
         self.title(f"Farm Manager v{self.version}")
@@ -329,6 +328,7 @@ class Methods(ctk.CTkFrame):
             self.log(f"\tPassword: {account.password}")
             self.log(f"\tAPI: {account.api_key}")
             self.log(f"\tSECRET: {account.shared_secret}")
+            self.log(f"\tIdentity Secret: {account.identity_secret}")
 
     def GetLocalIP(self) -> str:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -494,7 +494,7 @@ class SteamAccount():
             self.log('Login failed: Empty fields', 'red')
             return
         try:
-            steam_client = SteamClient(self.api_key, self.login, self.password, self.shared_secret, self.identity_secret)
+            steam_client = SteamClient(self.api_key, self.login, self.password, self.shared_secret, self.identity_secret, self.steamid)
             steam_client.login(self.login, self.password, self.shared_secret)
             self.log('Logged in', 'green')
             self.parent.update()
