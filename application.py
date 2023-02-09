@@ -36,8 +36,9 @@ class App(ctk.CTk):
         self.options.ChangeAppearanceMode('Dark')
 
         self.utils = Utils(self)
-        self.methods = Methods(self, width = self.width // 2, height = self.height * 2 // 3)
         self.accounts = self.utils.getAccounts()
+
+        self.methods = Methods(self, width = self.width // 2, height = self.height * 2 // 3)
         self.methods.grid(row = 1, column = 0, sticky = 'nsew')
         self.methods.grid_propagate(False)
         self.update()
@@ -127,6 +128,7 @@ class Methods(ctk.CTkFrame):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.parent = parent
+        
         self.steampath = self.parent.utils.config['steampath']
         self.steamcmdpath = self.parent.utils.config['steamcmdpath']
         self.cmdcommand = self.parent.utils.config['cmdcommand']
@@ -444,9 +446,6 @@ class SteamAccount():
         self.shared_secret = shared_secret
         self.identity_secret = identity_secret
 
-    def __repr__(self):
-        return f"SteamAccount({self.number}, {self.steamid}, {self.login}, {self.password}, {self.api_key}, {self.shared_secret}, {self.identity_secret})"
-
     def log(self, message: str, color: str = 'white'):
         self.parent.console.Log(f'[{self.number}] {message}', color)
 
@@ -462,8 +461,9 @@ class SteamAccount():
         try:
             client.make_offer(items, [], partner, f"Trade from {self.steamid}")
             self.log('Trade sent', 'green')
-        except Exception:
+        except Exception as e:
             self.log('Trade sending failed', 'red')
+            self.log(e)
             return
 
     def getInventory(self) -> list[Asset]:
