@@ -318,7 +318,7 @@ class Methods(ctk.CTkFrame):
             self.log('Drops updated', 'green')
             return
         self.parent.utils.drops[index].updatePrice()
-        self.after(1000, self.UpdatePrices, index + 1)
+        self.after(1500, self.UpdatePrices, index + 1)
 
     def ListAccounts(self):
         accounts = self.parent.utils.getAccounts()
@@ -426,8 +426,8 @@ class Drop():
             r = requests.get(req)
             price = r.json()["lowest_price"]
             price = price.replace(" pуб.", "") # deleting " pуб." from price
-            self.sheet.update_acell(f"C{self.index + 2}", price) 
-            self.sheet.update_acell(f"D{self.index + 2}", datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
+            self.sheet.update_acell(f"E{self.index + 2}", price) 
+            self.sheet.update_acell(f"F{self.index + 2}", datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
             self.log(f"{price} руб. Updated", 'green')
         except Exception as e:
             self.log(f"Not updated", 'red')
@@ -510,43 +510,13 @@ class Utils():
         self.gc = self.connectServiceAccount()
 
         self.sheet = self.gc.worksheet('Дропы')
-        self.drops = []
-        #ALL DROPS
-        self.drops.append(Drop(self, self.sheet, 0, 'Fracture Case', 'Fracture%20Case', '4698'))
-        self.drops.append(Drop(self, self.sheet, 1, 'Dreams and Nightmares Case', 'Dreams%20%26%20Nightmares%20Case', '4818'))
-        self.drops.append(Drop(self, self.sheet, 2, 'Recoil Case', 'Recoil%20Case', '4846'))
-        self.drops.append(Drop(self, self.sheet, 3, 'Clutch Case', 'Clutch%20Case', '4471'))
-        self.drops.append(Drop(self, self.sheet, 4, 'Snakebite Case', 'Snakebite%20Case', '4747'))
-        self.drops.append(Drop(self, self.sheet, 5, 'Operation Phoenix Weapon Case', 'Operation%20Phoenix%20Weapon%20Case', '4011'))
-        self.drops.append(Drop(self, self.sheet, 6, 'Huntsman Weapon Case', 'Huntsman%20Weapon%20Case', '4017'))
-        self.drops.append(Drop(self, self.sheet, 7, 'CS:GO Weapon Case', 'CS%3AGO%20Weapon%20Case', '4001'))
-        self.drops.append(Drop(self, self.sheet, 8, 'Operation Bravo Case', 'Operation%20Bravo%20Case', '4003'))
-        self.drops.append(Drop(self, self.sheet, 9, 'Spectrum Case', 'Spectrum%20Case', '4351'))
-        self.drops.append(Drop(self, self.sheet, 10, 'Sticker Capsule', 'Sticker%20Capsule', '4007'))
-        self.drops.append(Drop(self, self.sheet, 11, 'Danger Zone Case', 'Danger%20Zone%20Case', '4548'))
-        self.drops.append(Drop(self, self.sheet, 12, 'Chroma 2 Case', 'Chroma%202%20Case', '4089'))
-        self.drops.append(Drop(self, self.sheet, 13, 'Operation Wildfire Case', 'Operation%20Wildfire%20Case', '4187'))
-        self.drops.append(Drop(self, self.sheet, 14, 'Spectrum 2 Case', 'Spectrum%202%20Case', '4403'))
-        self.drops.append(Drop(self, self.sheet, 15, 'Chroma Case', 'Chroma%20Case', '4061'))
-        self.drops.append(Drop(self, self.sheet, 16, 'Community Sticker Capsule 1', 'Community%20Sticker%20Capsule%201', '4016'))
-        self.drops.append(Drop(self, self.sheet, 17, 'Winter Offensive Weapon Case', 'Winter%20Offensive%20Weapon%20Case', '4009'))
-        self.drops.append(Drop(self, self.sheet, 18, 'Sticker Capsule 2', 'Sticker%20Capsule%202', '4012'))
-        self.drops.append(Drop(self, self.sheet, 19, 'Prisma Case', 'Prisma%20Case', '4598'))
-        self.drops.append(Drop(self, self.sheet, 20, 'Horizon Case', 'Horizon%20Case', '4482'))
-        self.drops.append(Drop(self, self.sheet, 21, 'Falchion Case', 'Falchion%20Case', '4091'))
-        self.drops.append(Drop(self, self.sheet, 22, 'Operation Vanguard Weapon Case', 'Operation%20Vanguard%20Weapon%20Case', '4029'))
-        self.drops.append(Drop(self, self.sheet, 23, 'Gamma Case', 'Gamma%20Case', '4236'))
-        self.drops.append(Drop(self, self.sheet, 24, 'Prisma 2 Case', 'Prisma%202%20Case', '4695'))
-        self.drops.append(Drop(self, self.sheet, 25, 'Shadow Case', 'Shadow%20Case', '4138'))
-        self.drops.append(Drop(self, self.sheet, 26, 'Glove Case', 'Glove%20Case', '4288'))
-        self.drops.append(Drop(self, self.sheet, 27, 'Revolver Case', 'Revolver%20Case', '4186'))
-        self.drops.append(Drop(self, self.sheet, 28, 'Operation Hydra Case', 'Operation%20Hydra%20Case', '4352'))
-        self.drops.append(Drop(self, self.sheet, 29, 'CS20 Case', 'CS20%20Case', '4669'))
-        self.drops.append(Drop(self, self.sheet, 30, 'Operation Breakout Weapon Case', 'Operation%20Breakout%20Weapon%20Case', '4018'))
-        self.drops.append(Drop(self, self.sheet, 31, 'CS:GO Weapon Case 2', 'CS%3AGO%20Weapon%20Case%202', '4004'))
-        self.drops.append(Drop(self, self.sheet, 32, 'CS:GO Weapon Case 3', 'CS%3AGO%20Weapon%20Case%203', '4010'))
-        self.drops.append(Drop(self, self.sheet, 33, 'Gamma 2 Case', 'Gamma%202%20Case', '4281'))
-        self.drops.append(Drop(self, self.sheet, 34, 'Chroma 3 Case', 'Chroma%203%20Case', '4233'))
+        self.drops = self.getDrops()
+    
+    def getDrops(self):
+        self.log("Loading drops")
+        data = self.sheet.get_all_records()
+        self.log(f"{len(data)} drops loaded", 'green')
+        return [Drop(self, self.sheet, i, data[i]['Название'], data[i]['MarketID'], data[i]['DropID']) for i in range(len(data))]
 
     def log(self, message: str, color: str = 'white'):
         self.app.console.Log(message, color)
