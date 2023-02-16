@@ -305,7 +305,8 @@ class Methods(ctk.CTkFrame):
             i = int(sheet.acell('F1').value) + 2
             sheet.update_acell(f"A{i}", player)
             sheet.update_acell(f"B{i}", drop.name)
-            sheet.update_acell(f"C{i}", date)   
+            sheet.update_acell(f"C{i}", date)
+            sheet.update_acell(f"D{i}", drop.price)
             if self.autoTrading.get():
                 if not player.isdigit():
                     self.log(f"Account {player} is not digit. Cant trade", 'red')
@@ -413,13 +414,14 @@ class Methods(ctk.CTkFrame):
         self.parent.console.Log(f"{message}", color)
 
 class Drop():
-    def __init__(self, parent, sheet: gspread.Worksheet, index: int, name: str, marketid: str, dropid: str):
+    def __init__(self, parent, sheet: gspread.Worksheet, index: int, name: str, marketid: str, dropid: str, price: str):
         self.parent = parent
         self.sheet = sheet
         self.name = name
         self.index = index
         self.dropid = dropid
         self.marketid = marketid
+        self.price = ''.join(price.split()[:-1])
 
     def updatePrice(self):
         try:
@@ -517,7 +519,7 @@ class Utils():
         self.log("Loading drops")
         data = self.sheet.get_all_records()
         self.log(f"{len(data)} drops loaded", 'green')
-        return [Drop(self, self.sheet, i, data[i]['Название'], data[i]['MarketID'], data[i]['DropID']) for i in range(len(data))]
+        return [Drop(self, self.sheet, i, data[i]['Название'], data[i]['MarketID'], data[i]['DropID'], data[i]['Цена']) for i in range(len(data))]
 
     def log(self, message: str, color: str = 'white'):
         self.app.console.Log(message, color)
