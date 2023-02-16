@@ -227,7 +227,6 @@ class Methods(ctk.CTkFrame):
             accountActivationString = cmdstring.replace('X', str(windowsCoordinates[i][0])).replace('Y', str(windowsCoordinates[i][1]))
             if '-login' in cmdstring:
                 account = accounts[selectedAccounts[i]-1] # accounts is a dictionary
-                print(account)
                 accountActivationString = accountActivationString.replace('LOGIN', str(account.login)).replace('PASSWORD', str(account.password))
                 self.log(f"Account initialized: {account.number}", 'green')
             self.log(f"Command: {accountActivationString}", 'grey')
@@ -286,7 +285,9 @@ class Methods(ctk.CTkFrame):
         #example: L 07/26/2020 - 22:53:56: [DropsSummoner.smx] Игроку XyLiGaN<226><STEAM_1:0:558287561><> выпало [4281-0-1-4]
         for log in logs:
             self.update()
-            if 'DropsSummoner' not in log or 'There is no case in the config' in log: continue
+            if 'DropsSummoner' not in log or 'There is no case in the config' in log:
+                self.log("Skipped log")
+                continue
             log = log.split(' ')
             d1 = log[1].split('/')
             month = d1[0]
@@ -298,7 +299,7 @@ class Methods(ctk.CTkFrame):
             drop = log[8]
             drop = drop.split('-')[0][1:]
             for skin in self.parent.utils.drops:
-                if skin.dropid == drop:
+                if str(skin.dropid) == drop:
                     drop = skin
             self.log(f"Account {player} received {drop.name}  {date}", 'green')
             i = int(sheet.acell('F1').value) + 2
