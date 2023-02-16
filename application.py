@@ -286,7 +286,7 @@ class Methods(ctk.CTkFrame):
         #example: L 07/26/2020 - 22:53:56: [DropsSummoner.smx] Игроку XyLiGaN<226><STEAM_1:0:558287561><> выпало [4281-0-1-4]
         for log in logs:
             self.update()
-            if 'DropsSummoner' not in log: continue
+            if 'DropsSummoner' not in log or 'There is no case in the config' in log: continue
             log = log.split(' ')
             d1 = log[1].split('/')
             month = d1[0]
