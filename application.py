@@ -135,7 +135,9 @@ class Methods(ctk.CTkFrame):
 
         self.localip = self.GetLocalIP()
         self.last_logs = []
+        self.tradestack = []
         self.coordinates_dict = {}
+        self.TradeStackStart()
 
         self.serverlabel = ctk.CTkLabel(self, text = 'SERVER TOOLS', font = ('Robotto', 20, 'bold'))
         self.serverlabel.grid(row = 0, column = 0, sticky = 'nw', padx = 15, pady = 8)
@@ -174,7 +176,7 @@ class Methods(ctk.CTkFrame):
         self.startinstancesbtn.grid(row = 6, column = 0, sticky = 'nsew', padx = 15, pady = 8)
 
         self.autoTrading = tk.BooleanVar(self, False)
-        self.autotradingswitch = ctk.CTkSwitch(self, variable=self.autoTrading, text = 'Automatic trading', width=150)
+        self.autotradingswitch = ctk.CTkSwitch(self, variable=self.autoTrading, text = 'Automatic trading', width=150, command= self.ChooseTradeId)
         self.autotradingswitch.grid(row = 6, column = 1, sticky = 'nsew', padx = 15, pady = 8)
 
         self.restartaccountbtn = ctk.CTkButton(self, text = 'Restart account', width=150, command=self.RestartAccount)
@@ -185,6 +187,22 @@ class Methods(ctk.CTkFrame):
         self.testswitch.grid(row = 7, column = 1, sticky = 'nsew', padx = 15, pady = 8)
 
         self.update()
+
+    def TradeStackStart(self):
+        if self.tradestack:
+            self.tradestack.pop().sendTrade(self.autoTradingID)
+            self.after(60000, self.TradeStackStart)
+        else:
+            self.after(10000, self.TradeStackStart)
+
+    def ChooseTradeId(self):
+        if self.autoTrading.get():
+            tradedialog = ctk.CTkInputDialog(title='Enter SteamID', text='Enter SteamID to automatic trading')
+            value = tradedialog.get_input()
+            self.autoTradingID = value if value else "76561198064460092"
+            self.log(f"Changed automatic trading ID to {self.autoTradingID}")
+            print('changed to ', self.autoTradingID)
+
 
     def StartInstances(self) -> None:
         cmdstring = self.cmdcommand.replace('STEAMPATH', self.steampath).replace('IP', self.localip + ':27027')
@@ -242,11 +260,11 @@ class Methods(ctk.CTkFrame):
             self.log("Account was not started", 'red')
             return
         testing = self.isTesting.get()
-        account = self.parent.utils.getAccounts()[int(account_number)-1]
+        account = self.parent.accounts[int(account_number)-1]
         self.log(f"Restarting account {account_number}...", 'yellow')   
         accountActivationString = cmdstring.replace('LOGIN', str(account.login)).replace('PASSWORD', str(account.password)).replace('X', str(self.coordinates_dict[str(account_number)][0])).replace('Y', str(self.coordinates_dict[str(account_number)][1]))
-        self.log(f"Account initialized: {account['login']}", 'green')
-        self.log(f"Command: {accountActivationString}", 'white', attrs=['dark'])
+        self.log(f"Account initialized: {account.login}", 'green')
+        self.log(f"Command: {accountActivationString}", 'white')
         if not testing:
             os.system(accountActivationString)
         else: self.log("Testing mode. Skipping lauching...", 'yellow')
@@ -311,7 +329,8 @@ class Methods(ctk.CTkFrame):
                 if not player.isdigit():
                     self.log(f"Account {player} is not digit. Cant trade", 'red')
                     continue
-                self.parent.accounts[int(player)-1].sendTrade()       
+                self.tradestack.append(self.parent.accounts[int(player)-1])  
+                self.log("Added 1 trade to stack")
 
     def UpdatePrices(self, index: int = 0):
         if index == 0:
@@ -452,7 +471,7 @@ class SteamAccount():
     def log(self, message: str, color: str = 'white'):
         self.parent.console.Log(f'[{self.number}] {message}', color)
 
-    def sendTrade(self, partner: str = "76561198064460092"):
+    def sendTrade(self, partner: str):
         client = self.getSteamClient()
         if client is None:
             return
