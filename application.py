@@ -5,19 +5,42 @@ import requests
 import json
 from steampy.models import GameOptions, Asset
 from steampy.client import SteamClient
+from steampy.guard import generate_one_time_code
 import os
 from subprocess import Popen
 from rcon.source import Client
 import socket
 from datetime import datetime
 import pyautogui as pg
+import autoit
+from time import sleep
+import signal
 
 ctk.set_default_color_theme('green')
+
+class Panel(ctk.CTkFrame):
+    def __init__(self, parent: ctk.CTk, *args, **kwargs) -> None:
+        super().__init__(parent, *args, **kwargs)
+        self.consoleText = ctk.CTkTextbox(self,width = parent.width//2,height=parent.height * 2 // 3, fg_color = ('#1D1E1E','#1D1E1E'), state = 'disabled', font=('Consolas', 14))
+        self.consoleText.pack(anchor='center')
+    def AddText(self, message: str, color: str = 'white') -> None:
+        self.consoleText.tag_config(color, foreground = color)
+        self.consoleText.configure(state = 'normal')
+        self.consoleText.insert('end' , message, color)
+        self.consoleText.configure(state = 'disabled')
+    def UpdateStatus(self, index: int, message: str, color: str):
+        self.consoleText.tag_config(color, foreground = color)
+        self.consoleText.configure(state = 'normal')
+        text = self.consoleText.get(str(float(index)),f"{index+1}.0")
+        startIndex = f"{index}.{text.index(text.split()[-1])}"
+        self.consoleText.delete(startIndex,str(float(index)+1))
+        self.consoleText.insert(startIndex, message + '\n', color)
+        self.consoleText.configure(state = 'disabled')
 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.version = '1.4'
+        self.version = '2.0'
         self.width = 800
         self.height = 600
         self.title(f"Farm Manager v{self.version}")
@@ -25,8 +48,13 @@ class App(ctk.CTk):
         self.resizable(False, False)
         self.grid_columnconfigure((0,1), weight=0)
         self.grid_rowconfigure((0,1), weight=0)
-        self.console = Console(self, width=self.width//2, height=self.height)
-        self.console.grid(row = 0, column = 1, rowspan = 2, sticky = 'nsew')
+
+        self.panel = Panel(self, width=self.width // 2, height = self.height * 2 // 3)
+        self.panel.grid(row = 1, column = 1, sticky = 'nsew')
+        self.panel.grid_propagate(False)
+    
+        self.console = Console(self, width=self.width//2, height=self.height // 3)
+        self.console.grid(row = 0, column = 1, sticky = 'nsew')
         self.console.grid_propagate(False)
 
         self.options = Options(self, width = self.width // 2, height = self.height // 3)
@@ -37,16 +65,26 @@ class App(ctk.CTk):
 
         self.utils = Utils(self)
         self.accounts = self.utils.getAccounts()
+        for account in self.accounts:
+            text = f"[{account.number}]{' ' * (4-len(str(account.number)))}{account.login}"
+            self.panel.AddText(text)
+            status = account.status
+            spaces = (30 - len(text)) * ' '
+            if status=='OFF':  self.panel.AddText(f"{spaces}{account.status}\n", "red")
+            elif status=='LAUNCHING': self.panel.AddText(f"{spaces}{account.status}\n", "yellow")
+            elif status=='LAUNCHED': self.panel.AddText(f"{spaces}{account.status}\n", "green")
+            elif status=='DROPPED': self.panel.AddText(f"{spaces}{account.status}\n", "blue")
 
         self.methods = Methods(self, width = self.width // 2, height = self.height * 2 // 3)
         self.methods.grid(row = 1, column = 0, sticky = 'nsew')
         self.methods.grid_propagate(False)
+
         self.update()
 
 class Console(ctk.CTkFrame):
     def __init__(self, parent: ctk.CTk, *args, **kwargs) -> None:
         super().__init__(parent, *args, **kwargs)
-        self.consoleText = ctk.CTkTextbox(self,width = parent.width//2,height=parent.height, fg_color = ('#1D1E1E','#1D1E1E'), state = 'disabled', font=('Consolas', 10))
+        self.consoleText = ctk.CTkTextbox(self,width = parent.width//2,height=parent.height // 3, fg_color = ('#1D1E1E','#1D1E1E'), state = 'disabled', font=('Consolas', 10))
         self.consoleText.pack()
         self.Log('Console initialized')
 
@@ -129,15 +167,17 @@ class Methods(ctk.CTkFrame):
         super().__init__(parent, *args, **kwargs)
         self.parent = parent
 
+        self.localip = self.GetLocalIP()
         self.steampath = self.parent.utils.config['steampath']
         self.steamcmdpath = self.parent.utils.config['steamcmdpath']
-        self.cmdcommand = self.parent.utils.config['cmdcommand']
+        self.cmdcommand = self.parent.utils.config['cmdcommand'].replace('STEAMPATH', self.steampath).replace('IP', self.localip + ':27027')
 
-        self.localip = self.GetLocalIP()
         self.last_logs = []
         self.tradestack = []
         self.coordinates_dict = {}
+        self.accountQueue = []
         self.TradeStackStart()
+        self.CheckActiveAccounts()
 
         self.serverlabel = ctk.CTkLabel(self, text = 'SERVER TOOLS', font = ('Robotto', 20, 'bold'))
         self.serverlabel.grid(row = 0, column = 0, sticky = 'nw', padx = 15, pady = 8)
@@ -159,6 +199,10 @@ class Methods(ctk.CTkFrame):
 
         self.farmlabel = ctk.CTkLabel(self, text = 'FARM TOOLS', font = ('Robotto', 20, 'bold'))
         self.farmlabel.grid(row = 3, column = 0, sticky = 'nw', padx = 15, pady = (30,8))
+
+        self.maxAccounts = ctk.StringVar(self, 'Maximum')
+        self.maxAccountsentr = ctk.CTkOptionMenu(self, variable = self.maxAccounts, values=[str(x) for x in range(1,len(self.parent.accounts))])
+        self.maxAccountsentr.grid(row = 3, column = 1, sticky = 'nsew', padx = 15, pady = (30,8))
 
         self.listaccountbtn = ctk.CTkButton(self, text = 'List accounts', width=150, command=self.ListAccounts)
         self.listaccountbtn.grid(row = 4, column = 0, sticky = 'nsew', padx = 15, pady = 8)
@@ -186,6 +230,9 @@ class Methods(ctk.CTkFrame):
         self.testswitch = ctk.CTkSwitch(self, variable = self.isTesting, text = 'Testing mode', width=150)
         self.testswitch.grid(row = 7, column = 1, sticky = 'nsew', padx = 15, pady = 8)
 
+        self.test = ctk.CTkButton(self, text='test',command=lambda: list(self.coordinates_dict.values())[0].kill())
+        self.test.grid(row=8,column=0)
+
         self.update()
 
     def TradeStackStart(self):
@@ -203,13 +250,34 @@ class Methods(ctk.CTkFrame):
             self.log(f"Changed automatic trading ID to {self.autoTradingID}")
             print('changed to ', self.autoTradingID)
 
+    def CheckActiveAccounts(self):
+        print([x for x in self.accountQueue])
+        print([(c,a) for c,a in self.coordinates_dict.items()])
+        for coordinates, account in self.coordinates_dict.items():
+            if account=='' and len(self.accountQueue)>0:
+                newAccount = self.accountQueue.pop()
+                self.coordinates_dict[coordinates] = newAccount
+                self.log(f"Starting {newAccount.login}")
+                newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
+            if account and account.status == 'DROPPED':
+                self.coordinates_dict[coordinates] = ""
+        self.after(5000, self.CheckActiveAccounts)
 
     def StartInstances(self) -> None:
-        cmdstring = self.cmdcommand.replace('STEAMPATH', self.steampath).replace('IP', self.localip + ':27027')
         testing = self.isTesting.get()
-        accounts = self.parent.utils.getAccounts()
+        accounts = self.parent.accounts
+
+        n = int(self.maxAccounts.get())
         width, height = pg.size()
-        maxValue = (width//400) * (height//300)
+        distributions = [(i, j) for j in range(1, n+1) for i in range(1, n+1) if i*j >= n and i*400 < width and j*300 < height]
+        distributions.sort(key = lambda x: abs(x[0]-x[1]))
+        distributions.sort(key = lambda x: abs(x[0]*x[1] - n))
+        distribution = distributions[0]
+        padX = (width - distribution[0]*400) // (distribution[0]+1)
+        padY = (height - distribution[1]*300) // (distribution[1]+1)
+        windowsCoordinates = [(padX*(x+1)+x*400,padY*(y+1)+y*300) for y in range(distribution[1]) for x in range(distribution[0])]
+        self.coordinates_dict = {(x[0],x[1]):"" for x in windowsCoordinates}
+        
         selectaccounts = ctk.CTkInputDialog(title = 'Select accounts', text = 'Enter account numbers separated by spaces or ranges separated by dashes. Example: 1 2 3-5 6-10')
         selection = selectaccounts.get_input().split()
         selectedAccounts = set()
@@ -224,33 +292,15 @@ class Methods(ctk.CTkFrame):
             else:
                 self.log("Invalid input in {} argument".format(num+1), 'red')
                 continue
+        
         n = len(selectedAccounts)
         if n==0:
             self.log("No accounts selected", 'red')
             return
-        if n>maxValue or n>len(accounts):
-            self.log("Too many accounts selected. You can select up to {} accounts".format(min(maxValue, len(accounts))), 'red')
+        if n>len(accounts):
+            self.log("Too many accounts selected", 'red')
             return
-        selectedAccounts = sorted(list(selectedAccounts))
-        distributions = [(i, j) for j in range(1, n+1) for i in range(1, n+1) if i*j >= n and i*400 < width and j*300 < height]
-        distributions.sort(key = lambda x: abs(x[0]-x[1]))
-        distributions.sort(key = lambda x: abs(x[0]*x[1] - n))
-        distribution = distributions[0]
-        padX = (width - distribution[0]*400) // (distribution[0]+1)
-        padY = (height - distribution[1]*300) // (distribution[1]+1)
-        windowsCoordinates = [(padX*(x+1)+x*400,padY*(y+1)+y*300) for y in range(distribution[1]) for x in range(distribution[0])]
-        self.coordinates_dict = {str(selectedAccounts[i]):windowsCoordinates[i] for i in range(n)}
-        for i in range(n): self.log("Account {}: {}".format(selectedAccounts[i], windowsCoordinates[i]))
-        for i in range(n):
-            accountActivationString = cmdstring.replace('X', str(windowsCoordinates[i][0])).replace('Y', str(windowsCoordinates[i][1]))
-            if '-login' in cmdstring:
-                account = accounts[selectedAccounts[i]-1] # accounts is a dictionary
-                accountActivationString = accountActivationString.replace('LOGIN', str(account.login)).replace('PASSWORD', str(account.password))
-                self.log(f"Account initialized: {account.number}", 'green')
-            self.log(f"Command: {accountActivationString}", 'grey')
-            if testing: self.log("Testing mode. Skipping lauching...", 'yellow')
-            else:
-                os.system(accountActivationString)
+        self.accountQueue = [accounts[x-1] for x in selectedAccounts]
 
     def RestartAccount(self):
         cmdstring = self.cmdcommand.replace('STEAMPATH', self.steampath).replace('IP', self.localip + ':27015')
@@ -262,7 +312,7 @@ class Methods(ctk.CTkFrame):
         testing = self.isTesting.get()
         account = self.parent.accounts[int(account_number)-1]
         self.log(f"Restarting account {account_number}...", 'yellow')   
-        accountActivationString = cmdstring.replace('LOGIN', str(account.login)).replace('PASSWORD', str(account.password)).replace('X', str(self.coordinates_dict[str(account_number)][0])).replace('Y', str(self.coordinates_dict[str(account_number)][1]))
+        accountActivationString = cmdstring.replace('LOGIN', str(account.login)).replace('PASSWORD', str(account.password)).replace('-x X', '-x ' + str(self.coordinates_dict[str(account_number)][0])).replace('-y Y', '-y ' + str(self.coordinates_dict[str(account_number)][1]))
         self.log(f"Account initialized: {account.login}", 'green')
         self.log(f"Command: {accountActivationString}", 'white')
         if not testing:
@@ -295,8 +345,6 @@ class Methods(ctk.CTkFrame):
             if n>0:
                 self.log(f"[MONITORING] Found {n} new logs:", 'cyan')
                 self.CheckDrops(self.parent.utils.gc.worksheet('Выпадения'), new_logs)
-            else:
-                self.log("[MONITORING] No new logs", 'red')
         self.after(10000, self.MonitorDrops)
 
     def CheckDrops(self, sheet: gspread.Worksheet, logs: list):
@@ -458,7 +506,7 @@ class Drop():
         self.parent.log(f"[{self.name}] {message}", color)
 
 class SteamAccount():
-    def __init__(self, parent, number: int, steamid: str, login: str, password: str, api_key: str, shared_secret: str, identity_secret: str):
+    def __init__(self, parent, number: int, steamid: str, login: str, password: str, api_key: str, shared_secret: str, identity_secret: str, status: str = 'OFF', steamPID: int = 0, csgoPID: int = 0):
         self.parent = parent
         self.number = number
         self.steamid = steamid
@@ -467,9 +515,62 @@ class SteamAccount():
         self.api_key = api_key
         self.shared_secret = shared_secret
         self.identity_secret = identity_secret
+        self.status = status
+        self.steamPID = steamPID
+        self.csgoPID = csgoPID
+
+    def __repr__(self):
+        return str(self.login)
 
     def log(self, message: str, color: str = 'white'):
         self.parent.console.Log(f'[{self.number}] {message}', color)
+
+    def launch(self, accountActivationString: str):
+        self.status = 'LAUNCHING'
+        self.parent.panel.UpdateStatus(self.number, 'LAUNCHING','yellow')
+        self.parent.update()
+        accountActivationString = accountActivationString.replace('LOGIN', str(self.login)).replace('PASSWORD', str(self.password))
+        title = 'Вход в Steam'
+        print(accountActivationString)
+        autoit.run(accountActivationString)
+        while not autoit.win_exists(title):
+            pass
+        autoit.win_activate(title)
+        autoit.win_wait_active(title)
+        self.steamPID = autoit.win_get_process(title)
+        while autoit.win_exists(title):
+            try:
+                sleep(3)
+                autoit.win_activate(title)
+                for _ in range(5):
+                    autoit.send('{BACKSPACE}')
+                autoit.send(generate_one_time_code(self.shared_secret))
+                autoit.send("{Enter}")
+            except:
+                pass
+            finally:
+                sleep(3)
+        title = f'{self.number} ACCOUNT'
+        while not autoit.win_exists(title):
+                autoit.win_wait('Counter-Strike: Global Offensive - Direct3D 9')
+                autoit.win_activate('Counter-Strike: Global Offensive - Direct3D 9')
+                autoit.win_wait_active('Counter-Strike: Global Offensive - Direct3D 9')
+                autoit.win_set_title('Counter-Strike: Global Offensive - Direct3D 9', title)
+        self.csgoPID = autoit.win_get_process(title)
+        print(self.csgoPID, self.steamPID)
+        self.status = 'LAUNCHED'
+        self.parent.panel.UpdateStatus(self.number, 'LAUNCHED','green')
+
+    def kill(self):
+        self.log("Closing")
+        os.system(f'taskkill /PID {self.csgoPID} /t /f')
+        os.system(f'taskkill /PID {self.steamPID} /t /f')
+        #os.kill(self.csgoPID, signal.SIG)
+        #os.kill(self.steamPID, signal.SIGTERM)
+        self.csgoPID = 0
+        self.steamPID = 0
+        self.status = 'DROPPED'
+        self.parent.panel.UpdateStatus(self.number, 'DROPPED','blue')
 
     def sendTrade(self, partner: str):
         client = self.getSteamClient()
@@ -651,7 +752,7 @@ class Utils():
             data = open('config.json', 'w')  
             steamcmdpath = self.getSteamCMDpath()
             steampath = self.getSteampath()
-            data.write(json.dumps({"serviceAccountPath": "", "steamcmdpath": steamcmdpath, "steampath": steampath, "cmdcommand": "start \"\" STEAMPATH -login LOGIN PASSWORD -language russian -applaunch 730 -low -nohltv -nosound -novid -window -w 640 -h 480 +connect IP +exec farm.cfg -x X -y Y"}))
+            data.write(json.dumps({"serviceAccountPath": "", "steamcmdpath": steamcmdpath, "steampath": steampath, "cmdcommand": "STEAMPATH -login LOGIN PASSWORD -language russian -applaunch 730 -low -nohltv -nosound -novid -window -w 640 -h 480 +connect IP -console +exec farm.cfg -x X -y Y"}))
             data.close()
             self.log("Config file loaded.", 'green')
             self.app.options.configstatus.SetStatus('OK')
@@ -677,3 +778,12 @@ class Utils():
             self.validateAccounts(accounts, current+1, invalid+1)
             return
         self.app.after(60000, self.validateAccounts, accounts, current+1, invalid)
+
+
+
+def main():
+    application = App()
+    application.mainloop()
+
+if __name__ == '__main__':
+    main()
