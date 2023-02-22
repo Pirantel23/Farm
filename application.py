@@ -248,11 +248,8 @@ class Methods(ctk.CTkFrame):
             value = tradedialog.get_input()
             self.autoTradingID = value if value else "76561198064460092"
             self.log(f"Changed automatic trading ID to {self.autoTradingID}")
-            print('changed to ', self.autoTradingID)
 
     def CheckActiveAccounts(self):
-        print([x for x in self.accountQueue])
-        print([(c,a) for c,a in self.coordinates_dict.items()])
         for coordinates, account in self.coordinates_dict.items():
             if account=='' and len(self.accountQueue)>0:
                 newAccount = self.accountQueue.pop()
@@ -300,7 +297,8 @@ class Methods(ctk.CTkFrame):
         if n>len(accounts):
             self.log("Too many accounts selected", 'red')
             return
-        self.accountQueue = [accounts[x-1] for x in selectedAccounts]
+        if (not testing):
+            self.accountQueue = [accounts[x-1] for x in selectedAccounts]
 
     def RestartAccount(self):
         cmdstring = self.cmdcommand.replace('STEAMPATH', self.steampath).replace('IP', self.localip + ':27015')
@@ -377,7 +375,9 @@ class Methods(ctk.CTkFrame):
                 if not player.isdigit():
                     self.log(f"Account {player} is not digit. Cant trade", 'red')
                     continue
-                self.tradestack.append(self.parent.accounts[int(player)-1])  
+                account = self.parent.accounts[int(player)-1]
+                account.kill()
+                self.tradestack.append(account)  
                 self.log("Added 1 trade to stack")
 
     def UpdatePrices(self, index: int = 0):
@@ -531,7 +531,6 @@ class SteamAccount():
         self.parent.update()
         accountActivationString = accountActivationString.replace('LOGIN', str(self.login)).replace('PASSWORD', str(self.password))
         title = 'Вход в Steam'
-        print(accountActivationString)
         autoit.run(accountActivationString)
         while not autoit.win_exists(title):
             pass
@@ -557,7 +556,6 @@ class SteamAccount():
                 autoit.win_wait_active('Counter-Strike: Global Offensive - Direct3D 9')
                 autoit.win_set_title('Counter-Strike: Global Offensive - Direct3D 9', title)
         self.csgoPID = autoit.win_get_process(title)
-        print(self.csgoPID, self.steamPID)
         self.status = 'LAUNCHED'
         self.parent.panel.UpdateStatus(self.number, 'LAUNCHED','green')
 
