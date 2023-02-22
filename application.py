@@ -230,9 +230,6 @@ class Methods(ctk.CTkFrame):
         self.testswitch = ctk.CTkSwitch(self, variable = self.isTesting, text = 'Testing mode', width=150)
         self.testswitch.grid(row = 7, column = 1, sticky = 'nsew', padx = 15, pady = 8)
 
-        self.test = ctk.CTkButton(self, text='test',command=lambda: list(self.coordinates_dict.values())[0].kill())
-        self.test.grid(row=8,column=0)
-
         self.update()
 
     def TradeStackStart(self):
