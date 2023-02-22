@@ -251,7 +251,7 @@ class Methods(ctk.CTkFrame):
             if account=='' and len(self.accountQueue)>0:
                 newAccount = self.accountQueue.pop()
                 self.coordinates_dict[coordinates] = newAccount
-                self.log(f"Starting {newAccount.login}")
+                self.log(f"Starting {newAccount.login} at {coordinates}")
                 newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
             if account and account.status == 'DROPPED':
                 self.coordinates_dict[coordinates] = ""
@@ -274,19 +274,20 @@ class Methods(ctk.CTkFrame):
         
         selectaccounts = ctk.CTkInputDialog(title = 'Select accounts', text = 'Enter account numbers separated by spaces or ranges separated by dashes. Example: 1 2 3-5 6-10')
         selection = selectaccounts.get_input().split()
-        selectedAccounts = set()
+        selectedAccounts = []
         for num, i in enumerate(selection):
             if i.isdigit() and int(i)>0:
-                selectedAccounts.add(int(i))
+                selectedAccounts.append(int(i))
             elif '-' in i:
                 start = i.split('-')[0]
                 end = i.split('-')[1]
                 if start.isdigit() and end.isdigit():
-                    selectedAccounts |= set(range(max(1,int(start)), int(end)+1))
+                    selectedAccounts += list(range(max(1,int(start)), int(end)+1))
             else:
                 self.log("Invalid input in {} argument".format(num+1), 'red')
                 continue
-        
+        for i in selectedAccounts:
+            if selectedAccounts.count(i) > 1: selectedAccounts.pop(selectedAccounts.index(i))
         n = len(selectedAccounts)
         if n==0:
             self.log("No accounts selected", 'red')
@@ -295,7 +296,10 @@ class Methods(ctk.CTkFrame):
             self.log("Too many accounts selected", 'red')
             return
         if (not testing):
-            self.accountQueue = [accounts[x-1] for x in selectedAccounts]
+            self.accountQueue = [accounts[x-1] for x in selectedAccounts[::-1]]
+            self.log(f"Queue created with following order:",'green')
+            for account in selectedAccounts:
+                self.log(f"\t[{account.number}] {account.login}")
 
     def RestartAccount(self):
         cmdstring = self.cmdcommand.replace('STEAMPATH', self.steampath).replace('IP', self.localip + ':27015')
@@ -325,6 +329,7 @@ class Methods(ctk.CTkFrame):
         open(path + "DropsSummoner.log", 'w', encoding= 'utf-8').close()
 
     def MonitorDrops(self):
+        self.log("[MONITORING] Monitoring started.", 'green')
         path = self.steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\addons\\sourcemod\\logs\\DropsSummoner.log"
         self.update()
         if self.serverstatus.status == 'NO':
@@ -565,7 +570,7 @@ class SteamAccount():
         self.csgoPID = 0
         self.steamPID = 0
         self.status = 'DROPPED'
-        self.parent.panel.UpdateStatus(self.number, 'DROPPED','blue')
+        self.parent.panel.UpdateStatus(self.number, 'DROPPED','cyan')
 
     def sendTrade(self, partner: str):
         client = self.getSteamClient()
