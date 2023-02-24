@@ -254,7 +254,6 @@ class Methods(ctk.CTkFrame):
         for i in selectedAccounts:
             self.log("Added 1 trade to stack")
             account = self.parent.accounts[int(i)-1]
-            print(account.number, account.login, account.password, account.api_key, account.shared_secret)
             self.tradestack.append(account)
         
         
