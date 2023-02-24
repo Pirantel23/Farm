@@ -223,14 +223,41 @@ class Methods(ctk.CTkFrame):
         self.autotradingswitch = ctk.CTkSwitch(self, variable=self.autoTrading, text = 'Automatic trading', width=150, command= self.ChooseTradeId)
         self.autotradingswitch.grid(row = 6, column = 1, sticky = 'nsew', padx = 15, pady = 8)
 
-        self.restartaccountbtn = ctk.CTkButton(self, text = 'Restart account', width=150, command=self.RestartAccount)
-        self.restartaccountbtn.grid(row = 7, column = 0, sticky = 'nsew', padx = 15, pady = 8)
+        #self.restartaccountbtn = ctk.CTkButton(self, text = 'Restart account', width=150, command=self.RestartAccount)
+        #self.restartaccountbtn.grid(row = 7, column = 0, sticky = 'nsew', padx = 15, pady = 8)
+        self.manualtradebtn = ctk.CTkButton(self, text = 'Send trades', width = 150, command = self.SendManualTrades)
+        self.manualtradebtn.grid(row = 7, column = 0, sticky = 'nsew', padx = 15, pady = 8)
 
         self.isTesting = tk.BooleanVar(self, False)
         self.testswitch = ctk.CTkSwitch(self, variable = self.isTesting, text = 'Testing mode', width=150)
         self.testswitch.grid(row = 7, column = 1, sticky = 'nsew', padx = 15, pady = 8)
 
         self.update()
+
+    def SendManualTrades(self):
+        tradedialog = ctk.CTkInputDialog(title='Enter accounts', text='Enter accounts splitted by spaces or dashes to make ranges')
+        selection = tradedialog.get_input().split()
+        selectedAccounts = []
+        for num, i in enumerate(selection):
+            if i.isdigit() and int(i)>0:
+                selectedAccounts.append(int(i))
+            elif '-' in i:
+                start = i.split('-')[0]
+                end = i.split('-')[1]
+                if start.isdigit() and end.isdigit():
+                    selectedAccounts += list(range(max(1,int(start)), int(end)+1))
+            else:
+                self.log("Invalid input in {} argument".format(num+1), 'red')
+                continue
+        for i in selectedAccounts:
+            if selectedAccounts.count(i) > 1: selectedAccounts.pop(selectedAccounts.index(i))
+        for i in selectedAccounts:
+            self.log("Added 1 trade to stack")
+            account = self.parent.accounts[int(i)-1]
+            print(account.number, account.login, account.password, account.api_key, account.shared_secret)
+            self.tradestack.append(account)
+        
+        
 
     def TradeStackStart(self):
         if self.tradestack:
