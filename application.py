@@ -14,7 +14,6 @@ from datetime import datetime
 import pyautogui as pg
 import autoit
 from time import sleep
-import signal
 
 ctk.set_default_color_theme('green')
 
@@ -40,7 +39,7 @@ class Panel(ctk.CTkFrame):
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.version = '2.0'
+        self.version = '2.2'
         self.width = 800
         self.height = 600
         self.title(f"Farm Manager v{self.version}")
@@ -273,18 +272,19 @@ class Methods(ctk.CTkFrame):
             self.log(f"Changed automatic trading ID to {self.autoTradingID}")
 
     def CheckActiveAccounts(self):
+        print(self.accountQueue)
         for coordinates, account in self.coordinates_dict.items():
             if account=='' and len(self.accountQueue)>0:
                 newAccount = self.accountQueue.pop()
                 self.coordinates_dict[coordinates] = newAccount
                 self.log(f"Starting {newAccount.login} at {coordinates}")
-                newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
+                if not self.isTesting.get():
+                    newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
             if account and account.status == 'DROPPED':
                 self.coordinates_dict[coordinates] = ""
         self.after(5000, self.CheckActiveAccounts)
 
     def StartInstances(self) -> None:
-        testing = self.isTesting.get()
         accounts = self.parent.accounts
 
         n = int(self.maxAccounts.get())
@@ -321,11 +321,9 @@ class Methods(ctk.CTkFrame):
         if n>len(accounts):
             self.log("Too many accounts selected", 'red')
             return
-        if (not testing):
-            self.accountQueue = [accounts[x-1] for x in selectedAccounts[::-1]]
-            self.log(f"Queue created with following order:",'green')
-            for account in selectedAccounts:
-                self.log(f"\t[{account.number}] {account.login}")
+        self.accountQueue = [accounts[x-1] for x in selectedAccounts[::-1]]
+        for account in self.accountQueue:
+            self.log(f"Added to queue:\t[{account.number}] {account.login}", 'green')
 
     def RestartAccount(self):
         cmdstring = self.cmdcommand.replace('STEAMPATH', self.steampath).replace('IP', self.localip + ':27015')
@@ -355,7 +353,6 @@ class Methods(ctk.CTkFrame):
         open(path + "DropsSummoner.log", 'w', encoding= 'utf-8').close()
 
     def MonitorDrops(self):
-        self.log("[MONITORING] Monitoring started.", 'green')
         path = self.steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\addons\\sourcemod\\logs\\DropsSummoner.log"
         self.update()
         if self.serverstatus.status == 'NO':
@@ -371,6 +368,8 @@ class Methods(ctk.CTkFrame):
             if n>0:
                 self.log(f"[MONITORING] Found {n} new logs:", 'cyan')
                 self.CheckDrops(self.parent.utils.gc.worksheet('Выпадения'), new_logs)
+            else:
+                self.log(f"[MONITORING] No new logs", 'red')
         self.after(10000, self.MonitorDrops)
 
     def CheckDrops(self, sheet: gspread.Worksheet, logs: list):
@@ -399,14 +398,14 @@ class Methods(ctk.CTkFrame):
             sheet.update_acell(f"B{i}", drop.name)
             sheet.update_acell(f"C{i}", date)
             sheet.update_acell(f"D{i}", drop.price)
+            account = self.parent.accounts[int(player)-1]
             if self.autoTrading.get():
                 if not player.isdigit():
                     self.log(f"Account {player} is not digit. Cant trade", 'red')
                     continue
-                account = self.parent.accounts[int(player)-1]
-                account.kill()
                 self.tradestack.append(account)  
                 self.log("Added 1 trade to stack")
+            account.kill()
 
     def UpdatePrices(self, index: int = 0):
         if index == 0:
@@ -548,7 +547,7 @@ class SteamAccount():
         self.csgoPID = csgoPID
 
     def __repr__(self):
-        return str(self.login)
+        return f"[{self.number}] {self.login}"
 
     def log(self, message: str, color: str = 'white'):
         self.parent.console.Log(f'[{self.number}] {message}', color)
@@ -649,6 +648,7 @@ class SteamAccount():
             self.parent.update()
             return steam_client
         except Exception as e:
+            self.log(e,'red')
             self.getSteamClient(depth + 1)
             return
     
@@ -778,7 +778,7 @@ class Utils():
             data = open('config.json', 'w')  
             steamcmdpath = self.getSteamCMDpath()
             steampath = self.getSteampath()
-            data.write(json.dumps({"serviceAccountPath": "", "steamcmdpath": steamcmdpath, "steampath": steampath, "cmdcommand": "STEAMPATH -login LOGIN PASSWORD -language russian -applaunch 730 -low -nohltv -nosound -novid -window -w 640 -h 480 +connect IP -console +exec farm.cfg -x X -y Y"}))
+            data.write(json.dumps({"serviceAccountPath": "", "steamcmdpath": steamcmdpath, "steampath": steampath, "cmdcommand": "STEAMPATH -login LOGIN PASSWORD -language russian -applaunch 730 -low -nohltv -nosound -novid -window -w 640 -h 480 +connect IP +exec farm.cfg -console -x X -y Y"}))
             data.close()
             self.log("Config file loaded.", 'green')
             self.app.options.configstatus.SetStatus('OK')
@@ -792,18 +792,20 @@ class Utils():
         self.app.update()
         return accounts
     
-    def validateAccounts(self, accounts: list[SteamAccount], current: int = 0, invalid: int = 0):
+    def validateAccounts(self, accounts: list[SteamAccount], current: int = 0, invalid: list[SteamAccount] = []):
         if current == 0:
             self.log("Checking accounts", 'yellow')
         if current >= len(accounts):
             self.log("Checked all accounts", 'green')
-            self.log(f"Found {invalid} invalid accounts", 'red' if invalid > 0 else 'green')
+            self.log(f"Found {len(invalid)} invalid accounts:", 'red' if len(invalid) > 0 else 'green')
+            for i in invalid:
+                self.log(i, 'red')
             return
         client = accounts[current].getSteamClient()
         if client is None:
-            self.validateAccounts(accounts, current+1, invalid+1)
+            self.validateAccounts(accounts, current+1, invalid+[accounts[current]])
             return
-        self.app.after(60000, self.validateAccounts, accounts, current+1, invalid)
+        self.app.after(70000, self.validateAccounts, accounts, current+1, invalid)
 
 
 
