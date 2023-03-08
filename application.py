@@ -42,7 +42,7 @@ class Panel(ctk.CTkFrame):
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.version = '2.2'
+        self.version = '2.4'
         self.width = 800
         self.height = 600
         self.title(f"Farm Manager v{self.version}")
