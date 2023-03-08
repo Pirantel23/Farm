@@ -14,6 +14,9 @@ from datetime import datetime
 import pyautogui as pg
 import autoit
 from time import sleep
+import string
+from random import choices
+import math
 
 ctk.set_default_color_theme('green')
 
@@ -203,8 +206,10 @@ class Methods(ctk.CTkFrame):
         self.maxAccountsentr = ctk.CTkOptionMenu(self, variable = self.maxAccounts, values=[str(x) for x in range(1,len(self.parent.accounts))])
         self.maxAccountsentr.grid(row = 3, column = 1, sticky = 'nsew', padx = 15, pady = (30,8))
 
-        self.listaccountbtn = ctk.CTkButton(self, text = 'List accounts', width=150, command=self.ListAccounts)
-        self.listaccountbtn.grid(row = 4, column = 0, sticky = 'nsew', padx = 15, pady = 8)
+        #self.listaccountbtn = ctk.CTkButton(self, text = 'List accounts', width=150, command=self.ListAccounts)
+        #self.listaccountbtn.grid(row = 4, column = 0, sticky = 'nsew', padx = 15, pady = 8)
+        self.closeaccounts = ctk.CTkButton(self, text='Close accounts', width = 150, command=self.CloseAccounts)
+        self.closeaccounts.grid(row = 4, column = 0, sticky = 'nsew', padx = 15, pady = 8)
 
         self.checkAccountsbtn = ctk.CTkButton(self, text = 'Check accounts', command = lambda: self.parent.utils.validateAccounts(self.parent.utils.getAccounts()), width=150)
         self.checkAccountsbtn.grid(row = 4, column = 1, sticky = 'nsew', padx = 15, pady = 8)
@@ -233,6 +238,27 @@ class Methods(ctk.CTkFrame):
 
         self.update()
 
+    def CloseAccounts(self):
+        dialog = ctk.CTkInputDialog(title='Enter accounts', text='Enter accounts splitted by spaces or dashes to make ranges')
+        selection = dialog.get_input().split()
+        selectedAccounts = []
+        for num, i in enumerate(selection):
+            if i.isdigit() and int(i)>0:
+                selectedAccounts.append(int(i))
+            elif '-' in i:
+                start = i.split('-')[0]
+                end = i.split('-')[1]
+                if start.isdigit() and end.isdigit():
+                    selectedAccounts += list(range(max(1,int(start)), int(end)+1))
+            else:
+                self.log("Invalid input in {} argument".format(num+1), 'red')
+                continue
+        for i in selectedAccounts:
+            account = self.parent.accounts[int(i)-1]
+            if account.steamPID and account.csgoPID:
+                account.kill(True)
+            else: self.log(f"Cant close {account.number} account", 'red')
+
     def SendManualTrades(self):
         tradedialog = ctk.CTkInputDialog(title='Enter accounts', text='Enter accounts splitted by spaces or dashes to make ranges')
         selection = tradedialog.get_input().split()
@@ -254,8 +280,6 @@ class Methods(ctk.CTkFrame):
             self.log("Added 1 trade to stack")
             account = self.parent.accounts[int(i)-1]
             self.tradestack.append(account)
-        
-        
 
     def TradeStackStart(self):
         if self.tradestack:
@@ -272,32 +296,62 @@ class Methods(ctk.CTkFrame):
             self.log(f"Changed automatic trading ID to {self.autoTradingID}")
 
     def CheckActiveAccounts(self):
-        print(self.accountQueue)
+        print(f"Queue: {self.accountQueue}\nActive: {self.coordinates_dict}")
         for coordinates, account in self.coordinates_dict.items():
             if account=='' and len(self.accountQueue)>0:
-                newAccount = self.accountQueue.pop()
+                newAccount = self.accountQueue.pop(0)
                 self.coordinates_dict[coordinates] = newAccount
-                self.log(f"Starting {newAccount.login} at {coordinates}")
+                self.log(f"Launching {newAccount.login} at {coordinates}")
                 if not self.isTesting.get():
                     newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
-            if account and account.status == 'DROPPED':
+            if account and account.status in ['DROPPED','FATAL']:
                 self.coordinates_dict[coordinates] = ""
         self.after(5000, self.CheckActiveAccounts)
 
     def StartInstances(self) -> None:
+        def distribute_windows(n_windows, screen_width, screen_height, window_width, window_height, padding_x, padding_y):
+            n_rows = math.ceil(math.sqrt(n_windows))
+            n_cols = math.ceil(n_windows / n_rows)
+
+            total_width = (n_cols * window_width) + ((n_cols + 1) * padding_x)
+            total_height = (n_rows * window_height) + ((n_rows + 1) * padding_y)
+
+            start_x = (screen_width - total_width) // 2
+            start_y = (screen_height - total_height) // 2
+
+            windows = []
+            for r in range(n_rows):
+                for c in range(n_cols):
+                    x = start_x + (c * (window_width + padding_x)) + padding_x
+                    y = start_y + (r * (window_height + padding_y)) + padding_y
+                    windows.append((x, y))
+
+                    if len(windows) == n_windows:
+                        return windows
+
+            return windows
         accounts = self.parent.accounts
+        windowWidth = 100
+        windowHeight = 50
 
         n = int(self.maxAccounts.get())
         width, height = pg.size()
-        distributions = [(i, j) for j in range(1, n+1) for i in range(1, n+1) if i*j >= n and i*400 < width and j*300 < height]
-        distributions.sort(key = lambda x: abs(x[0]-x[1]))
-        distributions.sort(key = lambda x: abs(x[0]*x[1] - n))
-        distribution = distributions[0]
-        padX = (width - distribution[0]*400) // (distribution[0]+1)
-        padY = (height - distribution[1]*300) // (distribution[1]+1)
-        windowsCoordinates = [(padX*(x+1)+x*400,padY*(y+1)+y*300) for y in range(distribution[1]) for x in range(distribution[0])]
+
+        windowsCoordinates = distribute_windows(n, width, height, windowWidth, windowHeight, windowWidth//10, windowHeight//10)
+
+        root = ctk.CTkToplevel(self)
+        root.geometry(f"{width//5}x{height//5}")
+        root.title("Distribution")
+        root.resizable(False, False)
+        colors = [f"#{''.join(choices(string.hexdigits, k=6))}" for _ in range(n)]
+        screens = [ctk.CTkFrame(root,width=windowWidth//5, height=windowHeight//5, fg_color = colors[i]) for i in range(n)]
+        labels = [ctk.CTkLabel(screens[i], text = f"{i+1}", font=("Arial",8), fg_color = colors[i]) for i in range(n)]
+        for i in range(n):
+            screens[i].place(x=windowsCoordinates[i][0]//5, y=windowsCoordinates[i][1]//5)
+            screens[i].pack_propagate(False)
+            labels[i].place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
         self.coordinates_dict = {(x[0],x[1]):"" for x in windowsCoordinates}
-        
         selectaccounts = ctk.CTkInputDialog(title = 'Select accounts', text = 'Enter account numbers separated by spaces or ranges separated by dashes. Example: 1 2 3-5 6-10')
         selection = selectaccounts.get_input().split()
         selectedAccounts = []
@@ -321,8 +375,9 @@ class Methods(ctk.CTkFrame):
         if n>len(accounts):
             self.log("Too many accounts selected", 'red')
             return
-        self.accountQueue = [accounts[x-1] for x in selectedAccounts[::-1]]
-        for account in self.accountQueue:
+        toAdd = [accounts[x-1] for x in selectedAccounts]
+        self.accountQueue += toAdd
+        for account in toAdd:
             self.log(f"Added to queue:\t[{account.number}] {account.login}", 'green')
 
     def RestartAccount(self):
@@ -564,8 +619,14 @@ class SteamAccount():
         autoit.win_activate(title)
         autoit.win_wait_active(title)
         self.steamPID = autoit.win_get_process(title)
+        try_counter = 0
         while autoit.win_exists(title):
             try:
+                try_counter+=1
+                if try_counter > 3:
+                    self.log("Failed to launch", 'red')
+                    self.kill(fatal=True)
+                    return
                 sleep(3)
                 autoit.win_activate(title)
                 for _ in range(5):
@@ -586,7 +647,7 @@ class SteamAccount():
         self.status = 'LAUNCHED'
         self.parent.panel.UpdateStatus(self.number, 'LAUNCHED','green')
 
-    def kill(self):
+    def kill(self, fatal: bool = False):
         self.log("Closing")
         os.system(f'taskkill /PID {self.csgoPID} /t /f')
         os.system(f'taskkill /PID {self.steamPID} /t /f')
@@ -594,8 +655,12 @@ class SteamAccount():
         #os.kill(self.steamPID, signal.SIGTERM)
         self.csgoPID = 0
         self.steamPID = 0
-        self.status = 'DROPPED'
-        self.parent.panel.UpdateStatus(self.number, 'DROPPED','cyan')
+        if fatal:
+            self.status = 'FATAL'
+            self.parent.panel.UpdateStatus(self.number, 'FATAL','brown')
+        else:
+            self.status = 'DROPPED'
+            self.parent.panel.UpdateStatus(self.number, 'DROPPED','cyan')
 
     def sendTrade(self, partner: str):
         client = self.getSteamClient()
@@ -805,6 +870,7 @@ class Utils():
         if client is None:
             self.validateAccounts(accounts, current+1, invalid+[accounts[current]])
             return
+        client.logout()
         self.app.after(70000, self.validateAccounts, accounts, current+1, invalid)
 
 
