@@ -15,7 +15,7 @@ import pyautogui as pg
 import autoit
 from time import sleep
 import string
-from random import choices
+from random import choices     
 import math
 
 ctk.set_default_color_theme('green')
@@ -25,11 +25,13 @@ class Panel(ctk.CTkFrame):
         super().__init__(parent, *args, **kwargs)
         self.consoleText = ctk.CTkTextbox(self,width = parent.width//2,height=parent.height * 2 // 3, fg_color = ('#1D1E1E','#1D1E1E'), state = 'disabled', font=('Consolas', 14))
         self.consoleText.pack(anchor='center')
+
     def AddText(self, message: str, color: str = 'white') -> None:
         self.consoleText.tag_config(color, foreground = color)
         self.consoleText.configure(state = 'normal')
         self.consoleText.insert('end' , message, color)
         self.consoleText.configure(state = 'disabled')
+
     def UpdateStatus(self, index: int, message: str, color: str):
         self.consoleText.tag_config(color, foreground = color)
         self.consoleText.configure(state = 'normal')
@@ -380,23 +382,6 @@ class Methods(ctk.CTkFrame):
         for account in toAdd:
             self.log(f"Added to queue:\t[{account.number}] {account.login}", 'green')
 
-    def RestartAccount(self):
-        cmdstring = self.cmdcommand.replace('STEAMPATH', self.steampath).replace('IP', self.localip + ':27015')
-        accountselection = ctk.CTkInputDialog(title = 'Select account', text = 'Enter one account to restart')
-        account_number = accountselection.get_input()
-        if account_number not in self.coordinates_dict:
-            self.log("Account was not started", 'red')
-            return
-        testing = self.isTesting.get()
-        account = self.parent.accounts[int(account_number)-1]
-        self.log(f"Restarting account {account_number}...", 'yellow')   
-        accountActivationString = cmdstring.replace('LOGIN', str(account.login)).replace('PASSWORD', str(account.password)).replace('-x X', '-x ' + str(self.coordinates_dict[str(account_number)][0])).replace('-y Y', '-y ' + str(self.coordinates_dict[str(account_number)][1]))
-        self.log(f"Account initialized: {account.login}", 'green')
-        self.log(f"Command: {accountActivationString}", 'white')
-        if not testing:
-            os.system(accountActivationString)
-        else: self.log("Testing mode. Skipping lauching...", 'yellow')
-
     def ResetLogs(self):
         path = self.steamcmdpath + "\\steamapps\\common\\Counter-Strike Global Offensive Beta - Dedicated Server\\csgo\\addons\\sourcemod\\logs\\"
         for file in os.listdir(path):
@@ -427,7 +412,21 @@ class Methods(ctk.CTkFrame):
                 self.log(f"[MONITORING] No new logs", 'red')
         self.after(10000, self.MonitorDrops)
 
+    def GetAccountsBySteamID(self, steamid: str) -> SteamClient:
+        for account in self.parent.accounts:
+            if account.steamid == steamid: return account
+        self.log(f"Account {steamid} not found", 'red')
+
     def CheckDrops(self, sheet: gspread.Worksheet, logs: list):
+        def steam2_to_steamid(steam2_id):
+            parts = steam2_id.split(':')
+            x = int(parts[2])
+            y = int(parts[1])
+            z = int(parts[2])
+            steamid = z * 2 + 76561197960265728 + y
+            if parts[0] == 'STEAM_0':
+                steamid += x
+            return steamid
         #example: L 07/26/2020 - 22:53:56: [DropsSummoner.smx] Игроку XyLiGaN<226><STEAM_1:0:558287561><> выпало [4281-0-1-4]
         for log in logs:
             self.update()
@@ -440,23 +439,26 @@ class Methods(ctk.CTkFrame):
             day = d1[1]
             year = d1[2]
             date = f"{day}.{month}.{year} {log[3][:-1]}"
-            player = log[6]
-            player = player[:player.find('<')]
+            steam2id = log[6][:-3]
+            steam2id = steam2id[steam2id.rfind('<'):]
             drop = log[8]
             drop = drop.split('-')[0][1:]
+            
+            steamid = steam2_to_steamid(steam2id)
+            account = self.GetAccountsBySteamID(steamid)
+            if account is None: return
             for skin in self.parent.utils.drops:
                 if str(skin.dropid) == drop:
                     drop = skin
-            self.log(f"Account {player} received {drop.name}  {date}", 'green')
+            self.log(f"Account {account.number} received {drop.name}  {date}", 'green')
             i = int(sheet.acell('F1').value) + 2
-            sheet.update_acell(f"A{i}", player)
+            sheet.update_acell(f"A{i}", account.number)
             sheet.update_acell(f"B{i}", drop.name)
             sheet.update_acell(f"C{i}", date)
             sheet.update_acell(f"D{i}", drop.price)
-            account = self.parent.accounts[int(player)-1]
             if self.autoTrading.get():
-                if not player.isdigit():
-                    self.log(f"Account {player} is not digit. Cant trade", 'red')
+                if not steam2id.isdigit():
+                    self.log(f"Account {steam2id} is not digit. Cant trade", 'red')
                     continue
                 self.tradestack.append(account)  
                 self.log("Added 1 trade to stack")
@@ -862,7 +864,7 @@ class Utils():
             self.log("Checking accounts", 'yellow')
         if current >= len(accounts):
             self.log("Checked all accounts", 'green')
-            self.log(f"Found {len(invalid)} invalid accounts:", 'red' if len(invalid) > 0 else 'green')
+            self.log(f"Found {len(invalid)} invalid accounts:", 'red' if invalid > 0 else 'green')
             for i in invalid:
                 self.log(i, 'red')
             return
