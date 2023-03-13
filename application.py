@@ -44,7 +44,7 @@ class Panel(ctk.CTkFrame):
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.version = '2.4'
+        self.version = '2.6'
         self.width = 800
         self.height = 600
         self.title(f"Farm Manager v{self.version}")
@@ -421,15 +421,11 @@ class Methods(ctk.CTkFrame):
         self.log(f"Account {steamid} not found", 'red')
 
     def CheckDrops(self, sheet: gspread.Worksheet, logs: list):
-        def steam2_to_steamid(steam2_id):
-            parts = steam2_id.split(':')
-            x = int(parts[2])
-            y = int(parts[1])
-            z = int(parts[2])
-            steamid = z * 2 + 76561197960265728 + y
-            if parts[0] == 'STEAM_0':
-                steamid += x
-            return steamid
+        def ToSteam64Id(string: str):
+            x,y,z = string.split(':')
+            x = x[-1]
+            steamid = f'{x}000100000000000000000001{bin(int(z))[2:].zfill(31)}{y}'
+            return str(int(steamid, 2))
         #example: L 07/26/2020 - 22:53:56: [DropsSummoner.smx] Игроку XyLiGaN<226><STEAM_1:0:558287561><> выпало [4281-0-1-4]
         for log in logs:
             self.update()
@@ -446,8 +442,7 @@ class Methods(ctk.CTkFrame):
             steam2id = steam2id[steam2id.rfind('<')+1:]
             drop = log[8]
             drop = drop.split('-')[0][1:]
-            
-            steamid = steam2_to_steamid(steam2id)
+            steamid = ToSteam64Id(steam2id)
             account = self.GetAccountBySteamID(steamid)
             if account is None: return
             for skin in self.parent.utils.drops:
@@ -460,9 +455,6 @@ class Methods(ctk.CTkFrame):
             sheet.update_acell(f"C{i}", date)
             sheet.update_acell(f"D{i}", drop.price)
             if self.autoTrading.get():
-                if not steam2id.isdigit():
-                    self.log(f"Account {steam2id} is not digit. Cant trade", 'red')
-                    continue
                 self.tradestack.append(account)  
                 self.log("Added 1 trade to stack")
             account.kill()
