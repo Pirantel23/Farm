@@ -205,7 +205,7 @@ class Methods(ctk.CTkFrame):
         self.farmlabel.grid(row = 3, column = 0, sticky = 'nw', padx = 15, pady = (30,8))
 
         self.maxAccounts = ctk.StringVar(self, 'Maximum')
-        self.maxAccountsentr = ctk.CTkOptionMenu(self, variable = self.maxAccounts, values=[str(x) for x in range(1,len(self.parent.accounts))])
+        self.maxAccountsentr = ctk.CTkOptionMenu(self, variable = self.maxAccounts, values=[str(x) for x in range(1,len(self.parent.accounts))], command = self.SetDistribution)
         self.maxAccountsentr.grid(row = 3, column = 1, sticky = 'nsew', padx = 15, pady = (30,8))
 
         #self.listaccountbtn = ctk.CTkButton(self, text = 'List accounts', width=150, command=self.ListAccounts)
@@ -239,6 +239,51 @@ class Methods(ctk.CTkFrame):
         self.testswitch.grid(row = 7, column = 1, sticky = 'nsew', padx = 15, pady = 8)
 
         self.update()
+
+    def SetDistribution(self, value):
+        def distribute_windows(n_windows, screen_width, screen_height, window_width, window_height, padding_x, padding_y):
+            n_rows = math.ceil(math.sqrt(n_windows))
+            n_cols = math.ceil(n_windows / n_rows)
+
+            total_width = (n_cols * window_width) + ((n_cols + 1) * padding_x)
+            total_height = (n_rows * window_height) + ((n_rows + 1) * padding_y)
+
+            start_x = (screen_width - total_width) // 2
+            start_y = (screen_height - total_height) // 2
+
+            windows = []
+            for r in range(n_rows):
+                for c in range(n_cols):
+                    x = start_x + (c * (window_width + padding_x)) + padding_x
+                    y = start_y + (r * (window_height + padding_y)) + padding_y
+                    windows.append((x, y))
+
+                    if len(windows) == n_windows:
+                        return windows
+
+            return windows
+        windowWidth = 100
+        windowHeight = 50
+
+        n = int(value)
+        
+        width, height = pg.size()
+
+        windowsCoordinates = distribute_windows(n, width, height, windowWidth, windowHeight, windowWidth//10, windowHeight//10)
+
+        root = ctk.CTkToplevel(self)
+        root.geometry(f"{width//5}x{height//5}")
+        root.title("Distribution")
+        root.resizable(False, False)
+        colors = [f"#{''.join(choices(string.hexdigits, k=6))}" for _ in range(n)]
+        screens = [ctk.CTkFrame(root,width=windowWidth//5, height=windowHeight//5, fg_color = colors[i]) for i in range(n)]
+        labels = [ctk.CTkLabel(screens[i], text = f"{i+1}", font=("Arial",8), fg_color = colors[i]) for i in range(n)]
+        for i in range(n):
+            screens[i].place(x=windowsCoordinates[i][0]//5, y=windowsCoordinates[i][1]//5)
+            screens[i].pack_propagate(False)
+            labels[i].place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
+        self.coordinates_dict = {(x[0],x[1]):"" for x in windowsCoordinates}
 
     def CloseAccounts(self):
         dialog = ctk.CTkInputDialog(title='Enter accounts', text='Enter accounts splitted by spaces or dashes to make ranges')
@@ -303,7 +348,7 @@ class Methods(ctk.CTkFrame):
             if account=='' and len(self.accountQueue)>0:
                 newAccount = self.accountQueue.pop(0)
                 self.coordinates_dict[coordinates] = newAccount
-                self.log(f"Launching {newAccount.login} at {coordinates}")
+                self.log(f"Launching {newAccount.number} at {coordinates}")
                 if not self.isTesting.get():
                     newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
             if account and account.status in ['DROPPED','FATAL']:
@@ -311,49 +356,7 @@ class Methods(ctk.CTkFrame):
         self.after(5000, self.CheckActiveAccounts)
 
     def StartInstances(self) -> None:
-        def distribute_windows(n_windows, screen_width, screen_height, window_width, window_height, padding_x, padding_y):
-            n_rows = math.ceil(math.sqrt(n_windows))
-            n_cols = math.ceil(n_windows / n_rows)
-
-            total_width = (n_cols * window_width) + ((n_cols + 1) * padding_x)
-            total_height = (n_rows * window_height) + ((n_rows + 1) * padding_y)
-
-            start_x = (screen_width - total_width) // 2
-            start_y = (screen_height - total_height) // 2
-
-            windows = []
-            for r in range(n_rows):
-                for c in range(n_cols):
-                    x = start_x + (c * (window_width + padding_x)) + padding_x
-                    y = start_y + (r * (window_height + padding_y)) + padding_y
-                    windows.append((x, y))
-
-                    if len(windows) == n_windows:
-                        return windows
-
-            return windows
         accounts = self.parent.accounts
-        windowWidth = 100
-        windowHeight = 50
-
-        n = int(self.maxAccounts.get())
-        width, height = pg.size()
-
-        windowsCoordinates = distribute_windows(n, width, height, windowWidth, windowHeight, windowWidth//10, windowHeight//10)
-
-        root = ctk.CTkToplevel(self)
-        root.geometry(f"{width//5}x{height//5}")
-        root.title("Distribution")
-        root.resizable(False, False)
-        colors = [f"#{''.join(choices(string.hexdigits, k=6))}" for _ in range(n)]
-        screens = [ctk.CTkFrame(root,width=windowWidth//5, height=windowHeight//5, fg_color = colors[i]) for i in range(n)]
-        labels = [ctk.CTkLabel(screens[i], text = f"{i+1}", font=("Arial",8), fg_color = colors[i]) for i in range(n)]
-        for i in range(n):
-            screens[i].place(x=windowsCoordinates[i][0]//5, y=windowsCoordinates[i][1]//5)
-            screens[i].pack_propagate(False)
-            labels[i].place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-
-        self.coordinates_dict = {(x[0],x[1]):"" for x in windowsCoordinates}
         selectaccounts = ctk.CTkInputDialog(title = 'Select accounts', text = 'Enter account numbers separated by spaces or ranges separated by dashes. Example: 1 2 3-5 6-10')
         selection = selectaccounts.get_input().split()
         selectedAccounts = []
@@ -412,7 +415,7 @@ class Methods(ctk.CTkFrame):
                 self.log(f"[MONITORING] No new logs", 'red')
         self.after(10000, self.MonitorDrops)
 
-    def GetAccountsBySteamID(self, steamid: str) -> SteamClient:
+    def GetAccountBySteamID(self, steamid: str) -> SteamClient:
         for account in self.parent.accounts:
             if account.steamid == steamid: return account
         self.log(f"Account {steamid} not found", 'red')
@@ -440,12 +443,12 @@ class Methods(ctk.CTkFrame):
             year = d1[2]
             date = f"{day}.{month}.{year} {log[3][:-1]}"
             steam2id = log[6][:-3]
-            steam2id = steam2id[steam2id.rfind('<'):]
+            steam2id = steam2id[steam2id.rfind('<')+1:]
             drop = log[8]
             drop = drop.split('-')[0][1:]
             
             steamid = steam2_to_steamid(steam2id)
-            account = self.GetAccountsBySteamID(steamid)
+            account = self.GetAccountBySteamID(steamid)
             if account is None: return
             for skin in self.parent.utils.drops:
                 if str(skin.dropid) == drop:
