@@ -619,8 +619,9 @@ class SteamAccount():
         try_counter = 0
         while autoit.win_exists(title):
             try:
+                self.log(f"Trying to launch [Attempt {try_counter}]")
                 try_counter+=1
-                if try_counter > 3:
+                if try_counter > 7:
                     self.log("Failed to launch", 'red')
                     self.kill(fatal=True)
                     return
