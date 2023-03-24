@@ -1,6 +1,7 @@
 import gspread
 from glob import glob
 from json import load
+from time import sleep
 
 def getIndexByLogin(login: str) -> int:
     for account in accounts:
@@ -12,6 +13,7 @@ def setupAccounts():
     gc = gspread.service_account().open('Ферма').sheet1
     accounts = gc.get_all_records()
     for file in glob('*.maFile'):
+        sleep(2)
         with open(file, 'r', encoding='utf-8') as data:
             info = load(data)
             login = info['account_name']
