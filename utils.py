@@ -16,6 +16,7 @@ def setupAccounts():
             info = load(data)
             login = info['account_name']
             number = getIndexByLogin(login)
+            if number is None: continue
             account = accounts[number-1]
             print(account)
             if not account['SteamID']:
