@@ -44,7 +44,7 @@ class Panel(ctk.CTkFrame):
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.version = '2.6'
+        self.version = '2.9'
         self.width = 800
         self.height = 600
         self.title(f"Farm Manager v{self.version}")
@@ -68,6 +68,7 @@ class App(ctk.CTk):
         self.options.ChangeAppearanceMode('Dark')
 
         self.utils = Utils(self)
+        self.session = requests.Session()
         self.accounts = self.utils.getAccounts()
         for account in self.accounts:
             text = f"[{account.number}]{' ' * (4-len(str(account.number)))}{account.login}"
@@ -180,6 +181,7 @@ class Methods(ctk.CTkFrame):
         self.tradestack = []
         self.coordinates_dict = {}
         self.accountQueue = []
+        
         self.TradeStackStart()
         self.CheckActiveAccounts()
 
@@ -208,12 +210,12 @@ class Methods(ctk.CTkFrame):
         self.maxAccountsentr = ctk.CTkOptionMenu(self, variable = self.maxAccounts, values=[str(x) for x in range(1,len(self.parent.accounts))], command = self.SetDistribution)
         self.maxAccountsentr.grid(row = 3, column = 1, sticky = 'nsew', padx = 15, pady = (30,8))
 
-        #self.listaccountbtn = ctk.CTkButton(self, text = 'List accounts', width=150, command=self.ListAccounts)
-        #self.listaccountbtn.grid(row = 4, column = 0, sticky = 'nsew', padx = 15, pady = 8)
+        # self.listaccountbtn = ctk.CTkButton(self, text = 'List accounts', width=150, command=self.ListAccounts)
+        # self.listaccountbtn.grid(row = 4, column = 0, sticky = 'nsew', padx = 15, pady = 8)
         self.closeaccounts = ctk.CTkButton(self, text='Close accounts', width = 150, command=self.CloseAccounts)
         self.closeaccounts.grid(row = 4, column = 0, sticky = 'nsew', padx = 15, pady = 8)
 
-        self.checkAccountsbtn = ctk.CTkButton(self, text = 'Check accounts', command = lambda: self.parent.utils.validateAccounts(self.parent.utils.getAccounts()), width=150)
+        self.checkAccountsbtn = ctk.CTkButton(self, text = 'Check accounts', command = self.CheckAccounts, width=150)
         self.checkAccountsbtn.grid(row = 4, column = 1, sticky = 'nsew', padx = 15, pady = 8)
 
         self.pricedrops = ctk.CTkButton(self, text = 'Update drops', width=150, command = self.UpdatePrices)
@@ -226,7 +228,7 @@ class Methods(ctk.CTkFrame):
         self.startinstancesbtn.grid(row = 6, column = 0, sticky = 'nsew', padx = 15, pady = 8)
 
         self.autoTrading = tk.BooleanVar(self, False)
-        self.autotradingswitch = ctk.CTkSwitch(self, variable=self.autoTrading, text = 'Automatic trading', width=150, command= self.ChooseTradeId)
+        self.autotradingswitch = ctk.CTkSwitch(self, variable=self.autoTrading, text = 'Automatic trading', width=150) #command= self.ChooseTradeId
         self.autotradingswitch.grid(row = 6, column = 1, sticky = 'nsew', padx = 15, pady = 8)
 
         #self.restartaccountbtn = ctk.CTkButton(self, text = 'Restart account', width=150, command=self.RestartAccount)
@@ -285,6 +287,45 @@ class Methods(ctk.CTkFrame):
 
         self.coordinates_dict = {(x[0],x[1]):"" for x in windowsCoordinates}
 
+    def CheckAccounts(self):
+        accounts = self.parent.utils.getAccounts()
+        dialog = ctk.CTkInputDialog(title='Enter accounts', text='Enter accounts splitted by spaces or dashes to make ranges')
+        selection = dialog.get_input().split()
+        selectedAccounts = []
+        toValidate = []
+        for num, i in enumerate(selection):
+            if i.isdigit() and int(i)>0:
+                selectedAccounts.append(int(i))
+            elif '-' in i:
+                start = i.split('-')[0]
+                end = i.split('-')[1]
+                if start.isdigit() and end.isdigit():
+                    selectedAccounts += list(range(max(1,int(start)), int(end)+1))
+            else:
+                self.log("Invalid input in {} argument".format(num+1), 'red')
+                continue
+        for i in selectedAccounts:
+            if selectedAccounts.count(i) > 1: selectedAccounts.pop(selectedAccounts.index(i))
+        for i in selectedAccounts:
+            account = accounts[int(i)-1]
+            toValidate.append(account)
+        self.CheckStack(toValidate)
+            
+    
+    def CheckStack(self, stack, invalid = []):
+        if not stack:
+            self.log("Validation is finished")
+            c = len(invalid)
+            self.log(f"Found {c} invalid accounts", 'red' if c else 'green')
+            if c:
+                for i in invalid:
+                    self.log(i)
+            return
+        account = stack.pop(0)
+        if not account.isValid():
+            invalid.append(account)
+        self.after(70000, lambda: self.CheckStack(stack, invalid))
+
     def CloseAccounts(self):
         dialog = ctk.CTkInputDialog(title='Enter accounts', text='Enter accounts splitted by spaces or dashes to make ranges')
         selection = dialog.get_input().split()
@@ -330,8 +371,8 @@ class Methods(ctk.CTkFrame):
 
     def TradeStackStart(self):
         if self.tradestack:
-            self.tradestack.pop().sendTrade(self.autoTradingID)
-            self.after(60000, self.TradeStackStart)
+            self.tradestack.pop(0).sendTrade()
+            self.after(70000, self.TradeStackStart)
         else:
             self.after(10000, self.TradeStackStart)
 
@@ -343,7 +384,7 @@ class Methods(ctk.CTkFrame):
             self.log(f"Changed automatic trading ID to {self.autoTradingID}")
 
     def CheckActiveAccounts(self):
-        print(f"Queue: {self.accountQueue}\nActive: {self.coordinates_dict}")
+        print(f"Queue: {len(self.accountQueue)}\nActive: {len(self.coordinates_dict)}")
         for coordinates, account in self.coordinates_dict.items():
             if account=='' and len(self.accountQueue)>0:
                 newAccount = self.accountQueue.pop(0)
@@ -479,6 +520,7 @@ class Methods(ctk.CTkFrame):
             self.log(f"\tAPI: {account.api_key}")
             self.log(f"\tSECRET: {account.shared_secret}")
             self.log(f"\tIdentity Secret: {account.identity_secret}")
+            self.log(f"\tTradeID: {account.tradeID}")
 
     def GetLocalIP(self) -> str:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -585,7 +627,7 @@ class Drop():
         self.parent.log(f"[{self.name}] {message}", color)
 
 class SteamAccount():
-    def __init__(self, parent, number: int, steamid: str, login: str, password: str, api_key: str, shared_secret: str, identity_secret: str, status: str = 'OFF', steamPID: int = 0, csgoPID: int = 0):
+    def __init__(self, parent, number: int, steamid: str, login: str, password: str, api_key: str, shared_secret: str, identity_secret: str, tradeID: str, status: str = 'OFF', steamPID: int = 0, csgoPID: int = 0):
         self.parent = parent
         self.number = number
         self.steamid = steamid
@@ -594,6 +636,7 @@ class SteamAccount():
         self.api_key = api_key
         self.shared_secret = shared_secret
         self.identity_secret = identity_secret
+        self.tradeID = tradeID
         self.status = status
         self.steamPID = steamPID
         self.csgoPID = csgoPID
@@ -660,17 +703,19 @@ class SteamAccount():
             self.status = 'DROPPED'
             self.parent.panel.UpdateStatus(self.number, 'DROPPED','cyan')
 
-    def sendTrade(self, partner: str):
+    def sendTrade(self):
+        if not self.tradeID:
+            self.log("Sending trade to noone")
         client = self.getSteamClient()
         if client is None:
             return
         items = self.getInventory()
-        self.log(f'Sending trade to {partner}')
+        self.log(f'Sending trade to {self.tradeID}')
         if items is None:
             self.log('Cant send empty trade', 'red')
             return
         try:
-            client.make_offer(items, [], partner, f"Trade from {self.steamid}")
+            client.make_offer(items, [], self.tradeID, f"Trade from {self.number}")
             self.log('Trade sent', 'green')
         except Exception as e:
             self.log('Trade sending failed', 'red')
@@ -679,7 +724,7 @@ class SteamAccount():
 
     def getInventory(self) -> list[Asset]:
         self.log('Loading inventory...')
-        data = requests.get(f'https://steamcommunity.com/inventory/{self.steamid}/730/2?l=english&count=5000')
+        data = self.parent.session.get(f'https://steamcommunity.com/inventory/{self.steamid}/730/2?l=english&count=5000')
         if data.status_code == 200: self.log('Inventory loaded', 'green')
         else:
             self.log(f'Inventory loading failed with status code: {data.status_code}', 'red')
@@ -715,6 +760,18 @@ class SteamAccount():
             self.getSteamClient(depth + 1)
             return
     
+    def isValid(self):
+        client = self.getSteamClient()
+        if client is None:
+            self.log("Invalid", 'red')
+            return False
+        self.log("Valid", 'green')
+        try:
+            client.logout()
+        except Exception as e:
+            self.log(f"Failed to logout: {e}",'red')
+        return True
+
 class Utils():
     def __init__(self, app):
         self.app = app
@@ -850,28 +907,10 @@ class Utils():
     def getAccounts(self) -> list[SteamAccount]:
         self.log("Getting accounts from Google Sheets", 'yellow')
         accounts = self.gc.sheet1.get_all_records()
-        accounts = [SteamAccount(self.app, account['Номер'], str(account['SteamID']), account['Логин'], account['Пароль'], account['API'], account['SECRET'], account['IDENTITY']) for account in accounts]
+        accounts = [SteamAccount(self.app, account['Номер'], str(account['SteamID']), str(account['Логин']), str(account['Пароль']), str(account['API']), str(account['SECRET']), str(account['IDENTITY']), str(account['TRADE'])) for account in accounts]
         self.log(f"Loaded {len(accounts)} accounts", 'green')
         self.app.update()
         return accounts
-    
-    def validateAccounts(self, accounts: list[SteamAccount], current: int = 0, invalid: list[SteamAccount] = []):
-        if current == 0:
-            self.log("Checking accounts", 'yellow')
-        if current >= len(accounts):
-            self.log("Checked all accounts", 'green')
-            self.log(f"Found {len(invalid)} invalid accounts:", 'red' if invalid > 0 else 'green')
-            for i in invalid:
-                self.log(i, 'red')
-            return
-        client = accounts[current].getSteamClient()
-        if client is None:
-            self.validateAccounts(accounts, current+1, invalid+[accounts[current]])
-            return
-        client.logout()
-        self.app.after(70000, self.validateAccounts, accounts, current+1, invalid)
-
-
 
 def main():
     application = App()
