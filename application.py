@@ -17,6 +17,7 @@ from time import sleep
 import string
 from random import choices     
 import math
+from threading import Thread
 
 ctk.set_default_color_theme('green')
 
@@ -311,7 +312,6 @@ class Methods(ctk.CTkFrame):
             toValidate.append(account)
         self.CheckStack(toValidate)
             
-    
     def CheckStack(self, stack, invalid = []):
         if not stack:
             self.log("Validation is finished")
@@ -391,7 +391,10 @@ class Methods(ctk.CTkFrame):
                 self.coordinates_dict[coordinates] = newAccount
                 self.log(f"Launching {newAccount.number} at {coordinates}")
                 if not self.isTesting.get():
-                    newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
+                    f = lambda: newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
+                    t = Thread(target = f)
+                    t.start()
+                    print(t)
             if account and account.status in ['DROPPED','FATAL']:
                 self.coordinates_dict[coordinates] = ""
         self.after(5000, self.CheckActiveAccounts)
