@@ -69,7 +69,7 @@ class App(ctk.CTk):
         self.options.ChangeAppearanceMode('Dark')
 
         self.utils = Utils(self)
-        self.session = requests.Session()
+        self.proxies = self.utils.getProxies()
         self.accounts = self.utils.getAccounts()
         for account in self.accounts:
             text = f"[{account.number}]{' ' * (4-len(str(account.number)))}{account.login}"
@@ -374,7 +374,7 @@ class Methods(ctk.CTkFrame):
             self.tradestack.pop(0).sendTrade()
             self.after(70000, self.TradeStackStart)
         else:
-            self.after(10000, self.TradeStackStart)
+            self.after(1000, self.TradeStackStart)
 
     def ChooseTradeId(self):
         if self.autoTrading.get():
@@ -624,10 +624,22 @@ class Drop():
             self.sheet.update_acell(f"F{self.index + 2}", datetime.now().strftime("%d.%m.%Y %H:%M:%S"))
             self.log(f"{price} руб. Updated", 'green')
         except Exception as e:
-            self.log(f"Not updated", 'red')
+            self.log(f"Not updated: {e}", 'red')
     
     def log(self, message: str, color: str = 'white'):
         self.parent.log(f"[{self.name}] {message}", color)
+
+class Proxy():
+    def __init__(self, number: int, ip: str, port: str, login: str, password: str, expires: str):
+        self.number = number
+        self.ip = ip
+        self.port = port
+        self.login = login
+        self.password = password
+        self.expires = datetime.strptime(expires, '%d.%m.%Y %H:%M:%S')
+    
+    def __repr__(self):
+        return f"http://{self.login}:{self.password}@{self.ip}:{self.port}"
 
 class SteamAccount():
     def __init__(self, parent, number: int, steamid: str, login: str, password: str, api_key: str, shared_secret: str, identity_secret: str, tradeID: str, status: str = 'OFF', steamPID: int = 0, csgoPID: int = 0):
@@ -711,10 +723,11 @@ class SteamAccount():
             self.log("Sending trade to noone")
         client = self.getSteamClient()
         if client is None:
-            return
+            return 
+        self.session = client._session
         items = self.getInventory()
         self.log(f'Sending trade to {self.tradeID}')
-        if items is None:
+        if items is None or len(items) == 0:
             self.log('Cant send empty trade', 'red')
             return
         try:
@@ -726,12 +739,22 @@ class SteamAccount():
             return
 
     def getInventory(self) -> list[Asset]:
-        self.log('Loading inventory...')
-        data = self.parent.session.get(f'https://steamcommunity.com/inventory/{self.steamid}/730/2?l=english&count=5000')
-        if data.status_code == 200: self.log('Inventory loaded', 'green')
-        else:
-            self.log(f'Inventory loading failed with status code: {data.status_code}', 'red')
+        self.log('Loading inventory','yellow')
+        data = None
+        for proxy in self.parent.proxies:
+            self.session.proxies.update({'http':repr(proxy)})
+            data = self.session.get(f'https://steamcommunity.com/inventory/{self.steamid}/730/2?l=english&count=5000')
+            print(self.session.proxies.items())
+            if data.status_code == 200:
+                self.log(f'Inventory loaded with proxy {proxy.number}' if proxy else 'Inventory loaded without proxy', 'green')
+                break
+            else:
+                self.log(f'Failed to load inventory with proxy {proxy.number}: {data.status_code}' if proxy else f'Failed to load inventory without proxy: {data.status_code}', 'red')
+                
+        if data is None:
+            self.log('All proxies failed', 'red')
             return
+        
         json_data = json.loads(data.text)
         inventory_count = json_data['total_inventory_count']
         if inventory_count == 0:
@@ -740,7 +763,7 @@ class SteamAccount():
         assets = [(Asset(asset['assetid'], GameOptions('730','2'), asset['amount']), asset['classid']) for asset in json_data['assets']]
         descriptions = {description['classid']:description['tradable'] for description in json_data['descriptions']}
         tradable_assets = [asset[0] for asset in assets if descriptions[asset[1]] == 1]
-        self.log(f'Inventory loaded. {len(tradable_assets)} tradable items found', 'green')
+        self.log(f'{len(tradable_assets)} tradable items found', 'green')
         return tradable_assets
     
     def getSteamClient(self, depth: int = 0) -> SteamClient:
@@ -908,12 +931,20 @@ class Utils():
             return self.connectConfig()
         
     def getAccounts(self) -> list[SteamAccount]:
-        self.log("Getting accounts from Google Sheets", 'yellow')
+        self.log("Getting accounts", 'yellow')
         accounts = self.gc.sheet1.get_all_records()
         accounts = [SteamAccount(self.app, account['Номер'], str(account['SteamID']), str(account['Логин']), str(account['Пароль']), str(account['API']), str(account['SECRET']), str(account['IDENTITY']), str(account['TRADE'])) for account in accounts]
         self.log(f"Loaded {len(accounts)} accounts", 'green')
         self.app.update()
         return accounts
+
+    def getProxies(self) -> list[Proxy]:
+        self.log("Getting proxies", 'yellow')
+        proxies = self.gc.worksheet('Прокси').get_all_records()
+        proxies = [None] + [Proxy(proxy['NUMBER'], proxy['IP'], proxy['PORT'], proxy['LOGIN'], proxy['PASSWORD'], proxy['EXPIRES']) for proxy in proxies]
+        self.log(f"Loaded {len(proxies)} proxies", 'green')
+        self.app.update()
+        return proxies
 
 def main():
     application = App()
