@@ -17,7 +17,6 @@ from time import sleep
 import string
 from random import choices     
 import math
-from threading import Thread
 
 ctk.set_default_color_theme('green')
 
@@ -45,7 +44,7 @@ class Panel(ctk.CTkFrame):
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.version = '2.9'
+        self.version = '3.0'
         self.width = 800
         self.height = 600
         self.title(f"Farm Manager v{self.version}")
@@ -391,10 +390,7 @@ class Methods(ctk.CTkFrame):
                 self.coordinates_dict[coordinates] = newAccount
                 self.log(f"Launching {newAccount.number} at {coordinates}")
                 if not self.isTesting.get():
-                    f = lambda: newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
-                    t = Thread(target = f)
-                    t.start()
-                    print(t)
+                    newAccount.launch(self.cmdcommand.replace('LOGIN',str(newAccount.login)).replace('PASSWORD',str(newAccount.password)).replace('-x X','-x ' + str(coordinates[0])).replace('-y Y', '-y ' + str(coordinates[1])))
             if account and account.status in ['DROPPED','FATAL']:
                 self.coordinates_dict[coordinates] = ""
         self.after(5000, self.CheckActiveAccounts)
