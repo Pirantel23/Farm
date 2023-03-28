@@ -25,20 +25,15 @@ def setupAccounts():
                 steamid = file[:file.find('.')]
                 gc.update_acell(f'B{number+1}', steamid)
                 sleep(0.2)
-            if not account['Код']:
-                print('Writing revocation code')
-                code = info['revocation_code']
-                gc.update_acell(f'F{number+1}', code)
-                sleep(0.2)
             if not account['SECRET']:
                 print('Writing SECRET')
                 secret = info['shared_secret']
-                gc.update_acell(f'H{number+1}', secret)
+                gc.update_acell(f'F{number+1}', secret)
                 sleep(0.2)
             if not account['IDENTITY']:
                 print('Writing IDENTITY')
                 identity = info['identity_secret']
-                gc.update_acell(f'I{number+1}', identity)
+                gc.update_acell(f'G{number+1}', identity)
                 sleep(0.2)
 
 
