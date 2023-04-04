@@ -691,6 +691,12 @@ class SteamAccount():
                 sleep(3)
         title = f'{self.number} ACCOUNT'
         while not autoit.win_exists(title):
+                if (autoit.win_exists('Диалоговое окно Steam')):
+                    self.log("Closing dialog window",'yellow')
+                    autoit.win_activate('Диалоговое окно Steam')
+                    sleep(0.1)
+                    autoit.send('{TAB}')
+                    autoit.send('{ENTER}')
                 autoit.win_wait('Counter-Strike: Global Offensive - Direct3D 9')
                 autoit.win_activate('Counter-Strike: Global Offensive - Direct3D 9')
                 autoit.win_wait_active('Counter-Strike: Global Offensive - Direct3D 9')
@@ -746,13 +752,12 @@ class SteamAccount():
                 break
             else:
                 self.log(f'Failed to load inventory with proxy {proxy.number}: {data.status_code}' if proxy else f'Failed to load inventory without proxy: {data.status_code}', 'red')
-                
-        if data is None:
+        try:
+            json_data = json.loads(data.text)
+            inventory_count = json_data['total_inventory_count']
+        except:
             self.log('All proxies failed', 'red')
             return
-        
-        json_data = json.loads(data.text)
-        inventory_count = json_data['total_inventory_count']
         if inventory_count == 0:
             self.log('Inventory is empty', 'red')
             return
