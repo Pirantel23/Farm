@@ -409,7 +409,7 @@ class Methods(ctk.CTkFrame):
         if selectaccounts.get_input().upper() == 'AUTO':
             selection = self.parent.readyAccounts
         else:
-            selection = selectaccounts.split()
+            selection = selectaccounts.get_input().split()
         selectedAccounts = []
         for num, i in enumerate(selection):
             if i.isdigit() and int(i)>0:
