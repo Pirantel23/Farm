@@ -70,6 +70,7 @@ class App(ctk.CTk):
         self.utils = Utils(self)
         self.proxies = self.utils.getProxies()
         self.accounts = self.utils.getAccounts()
+        self.readyAccounts = self.get_ready_accounts()
         for account in self.accounts:
             text = f"[{account.number}]{' ' * (4-len(str(account.number)))}{account.login}"
             self.panel.AddText(text)
@@ -79,12 +80,19 @@ class App(ctk.CTk):
             elif status=='LAUNCHING': self.panel.AddText(f"{spaces}{account.status}\n", "yellow")
             elif status=='LAUNCHED': self.panel.AddText(f"{spaces}{account.status}\n", "green")
             elif status=='DROPPED': self.panel.AddText(f"{spaces}{account.status}\n", "blue")
+            elif status == 'READY': self.panel.AddText(f"{spaces}{account.status}\n","orange")
 
         self.methods = Methods(self, width = self.width // 2, height = self.height * 2 // 3)
         self.methods.grid(row = 1, column = 0, sticky = 'nsew')
         self.methods.grid_propagate(False)
-
         self.update()
+
+    def get_ready_accounts(self):
+        accounts = [str(value[9]) for value in self.utils.gc.worksheet('Выпадения').get_all_values() if value[9]][1:]
+        for account in self.accounts:
+            if str(account.number) in accounts:
+                account.status = 'READY'
+        return accounts
 
 class Console(ctk.CTkFrame):
     def __init__(self, parent: ctk.CTk, *args, **kwargs) -> None:
@@ -397,8 +405,11 @@ class Methods(ctk.CTkFrame):
 
     def StartInstances(self) -> None:
         accounts = self.parent.accounts
-        selectaccounts = ctk.CTkInputDialog(title = 'Select accounts', text = 'Enter account numbers separated by spaces or ranges separated by dashes. Example: 1 2 3-5 6-10')
-        selection = selectaccounts.get_input().split()
+        selectaccounts = ctk.CTkInputDialog(title = 'Select accounts', text = 'Enter account numbers separated by spaces or ranges separated by dashes or AUTO for auto selection')
+        if selectaccounts.get_input().upper() == 'AUTO':
+            selection = self.parent.readyAccounts
+        else:
+            selection = selectaccounts.split()
         selectedAccounts = []
         for num, i in enumerate(selection):
             if i.isdigit() and int(i)>0:
@@ -653,7 +664,7 @@ class SteamAccount():
         self.csgoPID = csgoPID
 
     def __repr__(self):
-        return f"[{self.number}] {self.login}"
+        return f"[{self.number}] {self.login}: {self.status}"
 
     def log(self, message: str, color: str = 'white'):
         self.parent.console.Log(f'[{self.number}] {message}', color)
@@ -691,11 +702,12 @@ class SteamAccount():
                 sleep(3)
         title = f'{self.number} ACCOUNT'
         while not autoit.win_exists(title):
-                if (autoit.win_exists('Диалоговое окно Steam')):
+                if autoit.win_exists('Диалоговое окно Steam'):
                     self.log("Closing dialog window",'yellow')
                     autoit.win_activate('Диалоговое окно Steam')
-                    sleep(0.1)
+                    autoit.win_wait_active('Диалоговое окно Steam')
                     autoit.send('{TAB}')
+                    sleep(0.1)
                     autoit.send('{ENTER}')
                 autoit.win_wait('Counter-Strike: Global Offensive - Direct3D 9')
                 autoit.win_activate('Counter-Strike: Global Offensive - Direct3D 9')
