@@ -406,10 +406,11 @@ class Methods(ctk.CTkFrame):
     def StartInstances(self) -> None:
         accounts = self.parent.accounts
         selectaccounts = ctk.CTkInputDialog(title = 'Select accounts', text = 'Enter account numbers separated by spaces or ranges separated by dashes or AUTO for auto selection')
-        if selectaccounts.get_input().upper() == 'AUTO':
+        value = selectaccounts.get_input()
+        if value.upper() == 'AUTO':
             selection = self.parent.readyAccounts
         else:
-            selection = selectaccounts.get_input().split()
+            selection = value.split()
         selectedAccounts = []
         for num, i in enumerate(selection):
             if i.isdigit() and int(i)>0:
