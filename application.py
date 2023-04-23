@@ -71,6 +71,14 @@ class App(ctk.CTk):
         self.proxies = self.utils.getProxies()
         self.accounts = self.utils.getAccounts()
         self.readyAccounts = self.get_ready_accounts()
+        self.draw_panel()
+
+        self.methods = Methods(self, width = self.width // 2, height = self.height * 2 // 3)
+        self.methods.grid(row = 1, column = 0, sticky = 'nsew')
+        self.methods.grid_propagate(False)
+        self.update()
+
+    def draw_panel(self):
         for account in self.accounts:
             text = f"[{account.number}]{' ' * (4-len(str(account.number)))}{account.login}"
             self.panel.AddText(text)
@@ -81,11 +89,6 @@ class App(ctk.CTk):
             elif status=='LAUNCHED': self.panel.AddText(f"{spaces}{account.status}\n", "green")
             elif status=='DROPPED': self.panel.AddText(f"{spaces}{account.status}\n", "blue")
             elif status == 'READY': self.panel.AddText(f"{spaces}{account.status}\n","orange")
-
-        self.methods = Methods(self, width = self.width // 2, height = self.height * 2 // 3)
-        self.methods.grid(row = 1, column = 0, sticky = 'nsew')
-        self.methods.grid_propagate(False)
-        self.update()
 
     def get_ready_accounts(self):
         accounts = [str(value[9]) for value in self.utils.gc.worksheet('Выпадения').get_all_values() if value[9]][1:]
@@ -297,7 +300,7 @@ class Methods(ctk.CTkFrame):
 
     def CheckAccounts(self):
         accounts = self.parent.utils.getAccounts()
-        dialog = ctk.CTkInputDialog(title='Enter accounts', text='Enter accounts splitted by spaces or dashes to make ranges')
+        dialog = ctk.CTkInputDialog(title='Accounts selection', text='Select accounts')
         selection = dialog.get_input().split()
         selectedAccounts = []
         toValidate = []
@@ -334,7 +337,7 @@ class Methods(ctk.CTkFrame):
         self.after(70000, lambda: self.CheckStack(stack, invalid))
 
     def CloseAccounts(self):
-        dialog = ctk.CTkInputDialog(title='Enter accounts', text='Enter accounts splitted by spaces or dashes to make ranges')
+        dialog = ctk.CTkInputDialog(title='Accounts selection', text='Select accounts')
         selection = dialog.get_input().split()
         selectedAccounts = []
         for num, i in enumerate(selection):
@@ -355,7 +358,7 @@ class Methods(ctk.CTkFrame):
             else: self.log(f"Cant close {account.number} account", 'red')
 
     def SendManualTrades(self):
-        tradedialog = ctk.CTkInputDialog(title='Enter accounts', text='Enter accounts splitted by spaces or dashes to make ranges')
+        tradedialog = ctk.CTkInputDialog(title='Account selection', text='Select accounts')
         selection = tradedialog.get_input().split()
         selectedAccounts = []
         for num, i in enumerate(selection):
@@ -385,7 +388,7 @@ class Methods(ctk.CTkFrame):
 
     def ChooseTradeId(self):
         if self.autoTrading.get():
-            tradedialog = ctk.CTkInputDialog(title='Enter SteamID', text='Enter SteamID to automatic trading')
+            tradedialog = ctk.CTkInputDialog(title='Trade setup', text='Enter SteamID')
             value = tradedialog.get_input()
             self.autoTradingID = value if value else "76561198064460092"
             self.log(f"Changed automatic trading ID to {self.autoTradingID}")
@@ -405,14 +408,16 @@ class Methods(ctk.CTkFrame):
 
     def StartInstances(self) -> None:
         accounts = self.parent.accounts
-        selectaccounts = ctk.CTkInputDialog(title = 'Select accounts', text = 'Enter account numbers separated by spaces or ranges separated by dashes or AUTO for auto selection')
+        selectaccounts = ctk.CTkInputDialog(title = 'Accounts selection', text ='Select accounts')
         value = selectaccounts.get_input()
-        if value.upper() == 'AUTO':
-            selection = self.parent.readyAccounts
+        if value.lower() == 'auto':
+            selection = self.parent.readyAccounts    
         else:
             selection = value.split()
         selectedAccounts = []
         for num, i in enumerate(selection):
+            if i.lower() == 'auto':
+                continue
             if i.isdigit() and int(i)>0:
                 selectedAccounts.append(int(i))
             elif '-' in i:
@@ -432,7 +437,14 @@ class Methods(ctk.CTkFrame):
         if n>len(accounts):
             self.log("Too many accounts selected", 'red')
             return
-        toAdd = [accounts[x-1] for x in selectedAccounts]
+        if 'auto' in value.lower():
+            toAdd = []
+            for x in selectedAccounts:
+                account = accounts[x-1]
+                if account.status == 'READY':
+                    toAdd.append(account)
+        else:
+            toAdd = [accounts[x-1] for x in selectedAccounts]
         self.accountQueue += toAdd
         for account in toAdd:
             self.log(f"Added to queue:\t[{account.number}] {account.login}", 'green')
@@ -677,18 +689,23 @@ class SteamAccount():
         accountActivationString = accountActivationString.replace('LOGIN', str(self.login)).replace('PASSWORD', str(self.password))
         title = 'Вход в Steam'
         autoit.run(accountActivationString)
+        try_counter = 0
         while not autoit.win_exists(title):
-            pass
+            try_counter += 1
+            sleep(1)
+            if try_counter > 30:
+                self.log("Failed to launch steam", 'red')
+                self.kill(fatal=True)
+                return
         autoit.win_activate(title)
         autoit.win_wait_active(title)
         self.steamPID = autoit.win_get_process(title)
         try_counter = 0
         while autoit.win_exists(title):
             try:
-                self.log(f"Trying to launch [Attempt {try_counter}]")
                 try_counter+=1
                 if try_counter > 7:
-                    self.log("Failed to launch", 'red')
+                    self.log("Failed to enter guard", 'red')
                     self.kill(fatal=True)
                     return
                 sleep(3)
@@ -702,18 +719,25 @@ class SteamAccount():
             finally:
                 sleep(3)
         title = f'{self.number} ACCOUNT'
+        try_counter = 0
         while not autoit.win_exists(title):
-                if autoit.win_exists('Диалоговое окно Steam'):
-                    self.log("Closing dialog window",'yellow')
-                    autoit.win_activate('Диалоговое окно Steam')
-                    autoit.win_wait_active('Диалоговое окно Steam')
-                    autoit.send('{TAB}')
-                    sleep(0.1)
-                    autoit.send('{ENTER}')
-                autoit.win_wait('Counter-Strike: Global Offensive - Direct3D 9')
+            if autoit.win_exists('Диалоговое окно Steam'):
+                self.log("Closing dialog window",'yellow')
+                autoit.win_activate('Диалоговое окно Steam')
+                autoit.win_wait_active('Диалоговое окно Steam')
+                autoit.send('{TAB}')
+                sleep(0.1)
+                autoit.send('{ENTER}')
+            if autoit.win_exists('Counter-Strike: Global Offensive - Direct3D 9'):
                 autoit.win_activate('Counter-Strike: Global Offensive - Direct3D 9')
-                autoit.win_wait_active('Counter-Strike: Global Offensive - Direct3D 9')
                 autoit.win_set_title('Counter-Strike: Global Offensive - Direct3D 9', title)
+            try_counter+=1
+            sleep(1)
+            if try_counter > 180:
+                self.log("Failed to launch cs", 'red')
+                self.kill(fatal=True)
+                return
+
         self.csgoPID = autoit.win_get_process(title)
         self.status = 'LAUNCHED'
         self.parent.panel.UpdateStatus(self.number, 'LAUNCHED','green')
