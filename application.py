@@ -502,9 +502,9 @@ class Methods(ctk.CTkFrame):
             day = d1[1]
             year = d1[2]
             date = f"{day}.{month}.{year} {log[3][:-1]}"
-            steam2id = log[6][:-3]
+            steam2id = log[-3][:-3]
             steam2id = steam2id[steam2id.rfind('<')+1:]
-            drop = log[8]
+            drop = log[-1]
             drop = drop.split('-')[0][1:]
             steamid = ToSteam64Id(steam2id)
             account = self.GetAccountBySteamID(steamid)
